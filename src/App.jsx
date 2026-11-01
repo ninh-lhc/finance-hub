@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { initializeApp } from 'firebase/app';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, increment
+  collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, increment
 } from 'firebase/firestore';
-import { 
-  getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged
-} from 'firebase/auth';
+import { auth, db, baseAppId } from './services/firebase/config.js';
+import useAuthUser from './hooks/useAuthUser.js';
+import useFirestoreRefs from './hooks/useFirestoreRefs.js';
 import GoogleUpgradeButton from './components/GoogleUpgradeButton.jsx';
 import ProgressBar from './components/common/ProgressBar.jsx';
 import DonutChart from './components/common/DonutChart.jsx';
@@ -23,26 +22,10 @@ import {
 } from 'lucide-react';
 
 // ==========================================
-// 1. CẤU HÌNH & HẰNG SỐ
-// ==========================================
-const firebaseConfig = {
-  apiKey: "AIzaSyAxf7IZZp3QoK4VTb3yeqztQeeJ8itzuOo",
-  authDomain: "tai-chinh-cua-toi.firebaseapp.com",
-  projectId: "tai-chinh-cua-toi",
-  storageBucket: "tai-chinh-cua-toi.firebasestorage.app",
-  messagingSenderId: "201177266866",
-  appId: "1:201177266866:web:d539f9300f46a0d45567ab"
-};
-const firebaseApp = initializeApp(firebaseConfig);
-const auth = getAuth(firebaseApp);
-const db = getFirestore(firebaseApp);
-const baseAppId = 'tai-chinh-cua-toi';
-
-// ==========================================
-// 4. MAIN APP COMPONENT
+// MAIN APP COMPONENT
 // ==========================================
 export default function App() {
-  const [user, setUser] = useState(null);
+  const user = useAuthUser();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('TRANSACTION');
@@ -51,6 +34,7 @@ export default function App() {
   const [activeSettingTab, setActiveSettingTab] = useState('sync');
   
   const [syncCode, setSyncCode] = useState(localStorage.getItem('finance_hub_sync_code') || '');
+  const { getCollectionRef, getDocRef } = useFirestoreRefs({ user, syncCode });
   const [inputSyncCode, setInputSyncCode] = useState('');
 
   const [formData, setFormData] = useState({});
@@ -96,28 +80,6 @@ export default function App() {
     setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000);
   };
 
-  // ==========================================
-  // 5. FIREBASE SERVICE LAYER
-  // ==========================================
-  
-  const userId = user?.uid || 'anonymous';
-
-  const getCollectionRef = useCallback((colName) => {
-    if (syncCode) {
-        return collection(db, 'artifacts', baseAppId, 'public', 'data', `sync_${syncCode}_${colName}`);
-    } else {
-        return collection(db, 'artifacts', baseAppId, 'users', userId, colName);
-    }
-  }, [syncCode, userId]);
-
-  const getDocRef = useCallback((colName, id) => {
-    if (syncCode) {
-        return doc(db, 'artifacts', baseAppId, 'public', 'data', `sync_${syncCode}_${colName}`, id);
-    } else {
-        return doc(db, 'artifacts', baseAppId, 'users', userId, colName, id);
-    }
-  }, [syncCode, userId]);
-
   const resetWalletBalance = async (wName) => {
     if (!user || isProcessing) return;
     setIsProcessing(true);
@@ -153,30 +115,6 @@ export default function App() {
     }
     setIsProcessing(false);
   };
-
-  // Khởi tạo Auth
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        const initialAuthToken = globalThis.__initial_auth_token;
-        if (initialAuthToken) {
-          try {
-            await signInWithCustomToken(auth, initialAuthToken);
-          } catch (tokenError) {
-            console.warn("Custom token invalid or expired, falling back to anonymous auth", tokenError);
-            await signInAnonymously(auth);
-          }
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (error) {
-        console.error("Firebase Auth Error:", error);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
 
   // Lắng nghe cài đặt chung (Ví, Danh mục)
   useEffect(() => {
