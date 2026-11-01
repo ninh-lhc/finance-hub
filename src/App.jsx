@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
-  getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, orderBy, where, writeBatch, increment 
+  getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, increment
 } from 'firebase/firestore';
 import { 
   getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged
@@ -62,13 +62,12 @@ export default function App() {
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
 
   const [selectedExpenseCategory, setSelectedExpenseCategory] = useState(null);
-  const [expandedTxId, setExpandedTxId] = useState(null);
+  const [, setExpandedTxId] = useState(null);
   const [walletView, setWalletView] = useState('list'); 
   const [selectedWalletDetail, setSelectedWalletDetail] = useState(null);
   const [annualSelectedMonth, setAnnualSelectedMonth] = useState('ALL');
   const [annualSelectedExpenseCategory, setAnnualSelectedExpenseCategory] = useState(null);
   const [annualExpandedTxId, setAnnualExpandedTxId] = useState(null);
-  const [recentExpandedTxId, setRecentExpandedTxId] = useState(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('ALL');
@@ -101,21 +100,23 @@ export default function App() {
   // 5. FIREBASE SERVICE LAYER
   // ==========================================
   
-  const getCollectionRef = (colName) => {
+  const userId = user?.uid || 'anonymous';
+
+  const getCollectionRef = useCallback((colName) => {
     if (syncCode) {
         return collection(db, 'artifacts', baseAppId, 'public', 'data', `sync_${syncCode}_${colName}`);
     } else {
-        return collection(db, 'artifacts', baseAppId, 'users', user?.uid || 'anonymous', colName);
+        return collection(db, 'artifacts', baseAppId, 'users', userId, colName);
     }
-  };
+  }, [syncCode, userId]);
 
-  const getDocRef = (colName, id) => {
+  const getDocRef = useCallback((colName, id) => {
     if (syncCode) {
         return doc(db, 'artifacts', baseAppId, 'public', 'data', `sync_${syncCode}_${colName}`, id);
     } else {
-        return doc(db, 'artifacts', baseAppId, 'users', user?.uid || 'anonymous', colName, id);
+        return doc(db, 'artifacts', baseAppId, 'users', userId, colName, id);
     }
-  };
+  }, [syncCode, userId]);
 
   const resetWalletBalance = async (wName) => {
     if (!user || isProcessing) return;
@@ -157,9 +158,10 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        const initialAuthToken = globalThis.__initial_auth_token;
+        if (initialAuthToken) {
           try {
-            await signInWithCustomToken(auth, __initial_auth_token);
+            await signInWithCustomToken(auth, initialAuthToken);
           } catch (tokenError) {
             console.warn("Custom token invalid or expired, falling back to anonymous auth", tokenError);
             await signInAnonymously(auth);
@@ -192,7 +194,7 @@ export default function App() {
       (err) => console.error("Lỗi tải cấu hình:", err)
     );
     return () => unsubSettings();
-  }, [user, syncCode]);
+  }, [user, syncCode, getDocRef]);
 
   // Lắng nghe dữ liệu theo Tháng được chọn
   useEffect(() => {
@@ -212,7 +214,7 @@ export default function App() {
     const unsubBudgets = onSnapshot(getCollectionRef('budgets'), (s) => setBudgets(s.docs.map(d => ({ id: d.id, ...d.data() }))));
 
     return () => { unsubTrans(); unsubGoals(); unsubBudgets(); };
-  }, [user, syncCode, selectedYear, selectedMonth]);
+  }, [user, syncCode, selectedYear, selectedMonth, getCollectionRef]);
 
   // Lấy toàn bộ dữ liệu năm khi vào tab Annual
   useEffect(() => {
@@ -245,7 +247,7 @@ export default function App() {
     
     fetchAnnualData();
     return () => { isMounted = false; };
-  }, [user, syncCode, activeTab, selectedYear, annualRefreshTick]);
+  }, [user, syncCode, activeTab, selectedYear, annualRefreshTick, getCollectionRef]);
 
   // ==========================================
   // 6. BUSINESS LOGIC (USEMEMO)
