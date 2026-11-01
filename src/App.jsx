@@ -18,6 +18,13 @@ import SettingsView from './features/settings/SettingsView.jsx';
 import TransactionModal from './features/transactions/TransactionModal.jsx';
 import utils from './utils/format.js';
 import { deriveFinanceLogic, deriveTransactionView } from './logic/deriveFinance.js';
+import {
+  combineBalanceImpacts,
+  getTransactionBalanceImpact,
+  getTransactionDeleteBalanceImpact,
+  getTransactionUpdateBalanceImpact,
+  getTransferBalanceImpact,
+} from './logic/transactionBalance.js';
 
 // ==========================================
 // MAIN APP COMPONENT
@@ -415,9 +422,6 @@ export default function App() {
           const actualCol = `transactions_${y}_${m}`;
           const settingsRef = getDocRef('settings', 'general');
           
-          const impacts = {};
-          const addImpact = (w, amt) => { if(w) impacts[w] = (impacts[w] || 0) + amt; };
-          
           // Case 1: Chuyển khoản (Luân chuyển tiền)
           if (formData.type === 'TRANSFER' && !editingTxId) {
               const transferId = Date.now().toString(); 
@@ -428,11 +432,14 @@ export default function App() {
               const txInRef = doc(getCollectionRef(actualCol));
               batch.set(txInRef, { ...payload, type: 'INCOME', wallet: formData.toWallet, category: 'Chuyển khoản đến', note: `Nhận từ ${formData.wallet}: ${formData.note || ''}`, createdAt: new Date().toISOString(), transferId });
               
-              addImpact(formData.wallet, -payload.amount);
-              addImpact(formData.toWallet, payload.amount);
+              const impacts = getTransferBalanceImpact({
+                fromWallet: formData.wallet,
+                toWallet: formData.toWallet,
+                amount: payload.amount,
+              });
               
               const wbUpdates = {};
-              Object.keys(impacts).forEach(w => { if (impacts[w] !== 0) wbUpdates[w] = increment(impacts[w]); });
+              for (const [w, delta] of impacts) { if (delta !== 0) wbUpdates[w] = increment(delta); }
               if (Object.keys(wbUpdates).length > 0) batch.set(settingsRef, { walletBalances: wbUpdates }, { merge: true });
               
               await batch.commit();
@@ -443,15 +450,9 @@ export default function App() {
           }
           
           // Case 2: Thu/Chi bình thường (Có hỗ trợ Sửa)
-          if (editingTxId && originalTx) {
-             const oldW = originalTx.type === 'EXPENSE' ? (originalTx.linkedWallet || originalTx.wallet) : originalTx.wallet;
-             const oldAmt = originalTx.type === 'EXPENSE' ? originalTx.amount : -originalTx.amount;
-             addImpact(oldW, oldAmt); // Hoàn tiền cũ
-          }
-          
-          const newW = payload.type === 'EXPENSE' ? (payload.linkedWallet || payload.wallet) : payload.wallet;
-          const newAmt = payload.type === 'EXPENSE' ? -payload.amount : payload.amount;
-          addImpact(newW, newAmt); // Trừ/Cộng tiền mới
+          const impacts = editingTxId && originalTx
+            ? getTransactionUpdateBalanceImpact({ previousTransaction: originalTx, nextTransaction: payload })
+            : getTransactionBalanceImpact(payload);
 
           if (editingTxId) {
              const [oldY, oldM] = (originalTx?.date || '').split('-');
@@ -468,7 +469,7 @@ export default function App() {
           }
           
           const wbUpdates = {};
-          Object.keys(impacts).forEach(w => { if (impacts[w] !== 0) wbUpdates[w] = increment(impacts[w]); });
+          for (const [w, delta] of impacts) { if (delta !== 0) wbUpdates[w] = increment(delta); }
           if (Object.keys(wbUpdates).length > 0) batch.set(settingsRef, { walletBalances: wbUpdates }, { merge: true }); 
           
           await batch.commit();
@@ -501,33 +502,26 @@ export default function App() {
              
              const batch = writeBatch(db);
              const settingsRef = getDocRef('settings', 'general');
-             const impacts = {};
-             const addImpact = (w, amt) => { if(w) impacts[w] = (impacts[w] || 0) + amt; };
-             
              if (txObj.transferId) {
                  const q = query(getCollectionRef(actualCol), where("transferId", "==", txObj.transferId));
                  const snap = await getDocs(q);
+                 let impacts = combineBalanceImpacts();
                  snap.docs.forEach(docSnap => {
-                     const rt = docSnap.data();
-                     const w = rt.type === 'EXPENSE' ? (rt.linkedWallet || rt.wallet) : rt.wallet;
-                     const amt = rt.type === 'EXPENSE' ? rt.amount : -rt.amount;
-                     addImpact(w, amt);
+                     impacts = combineBalanceImpacts(impacts, getTransactionDeleteBalanceImpact(docSnap.data()));
                      batch.delete(docSnap.ref);
                  });
                  
                  const wbUpdates = {};
-                 Object.keys(impacts).forEach(w => { if (impacts[w] !== 0) wbUpdates[w] = increment(impacts[w]); });
+                 for (const [w, delta] of impacts) { if (delta !== 0) wbUpdates[w] = increment(delta); }
                  if (Object.keys(wbUpdates).length > 0) batch.set(settingsRef, { walletBalances: wbUpdates }, { merge: true });
                  
                  await batch.commit();
                  showToast('Đã xóa toàn bộ phiếu luân chuyển!', 'success');
              } else {
-                 const w = txObj.type === 'EXPENSE' ? (txObj.linkedWallet || txObj.wallet) : txObj.wallet;
-                 const amt = txObj.type === 'EXPENSE' ? txObj.amount : -txObj.amount;
-                 addImpact(w, amt);
+                 const impacts = getTransactionDeleteBalanceImpact(txObj);
                  
                  const wbUpdates = {};
-                 Object.keys(impacts).forEach(w => { if (impacts[w] !== 0) wbUpdates[w] = increment(impacts[w]); });
+                 for (const [w, delta] of impacts) { if (delta !== 0) wbUpdates[w] = increment(delta); }
                  if (Object.keys(wbUpdates).length > 0) batch.set(settingsRef, { walletBalances: wbUpdates }, { merge: true });
                  
                  batch.delete(getDocRef(actualCol, id));
