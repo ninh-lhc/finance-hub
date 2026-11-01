@@ -1,6 +1,6 @@
 ﻿import React, { useState, useMemo } from 'react';
 import { 
-  collection, addDoc, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, increment
+  collection, addDoc, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, writeBatch, increment
 } from 'firebase/firestore';
 import { auth, db, baseAppId } from './services/firebase/config.js';
 import useAuthUser from './hooks/useAuthUser.js';
@@ -19,12 +19,9 @@ import TransactionModal from './features/transactions/TransactionModal.jsx';
 import utils from './utils/format.js';
 import { deriveFinanceLogic, deriveTransactionView } from './logic/deriveFinance.js';
 import {
-  combineBalanceImpacts,
-  getTransactionBalanceImpact,
-  getTransactionDeleteBalanceImpact,
-  getTransactionUpdateBalanceImpact,
-  getTransferBalanceImpact,
-} from './logic/transactionBalance.js';
+  saveTransactionToFirestore,
+  deleteTransactionFromFirestore,
+} from './services/finance/transactionService.js';
 
 // ==========================================
 // MAIN APP COMPONENT
@@ -410,69 +407,36 @@ export default function App() {
       const originalTx = payload.originalTx;
       delete payload.originalTx;
       
-      const batch = writeBatch(db);
-      
       if (modalType === 'TRANSACTION') {
           if (!payload.date) payload.date = utils.getLocalYMD();
           if (!payload.wallet) payload.wallet = wallets[0];
           if (useLinkedWallet && formData.linkedWallet && formData.type === 'EXPENSE') payload.linkedWallet = formData.linkedWallet;
           else payload.linkedWallet = ''; 
           
-          const [y, m] = payload.date.split('-');
-          const actualCol = `transactions_${y}_${m}`;
-          const settingsRef = getDocRef('settings', 'general');
-          
-          // Case 1: Chuyển khoản (Luân chuyển tiền)
           if (formData.type === 'TRANSFER' && !editingTxId) {
-              const transferId = Date.now().toString(); 
-              
-              const txOutRef = doc(getCollectionRef(actualCol));
-              batch.set(txOutRef, { ...payload, type: 'EXPENSE', category: 'Chuyển khoản đi', note: `Chuyển tới ${formData.toWallet}: ${formData.note || ''}`, createdAt: new Date().toISOString(), transferId });
-              
-              const txInRef = doc(getCollectionRef(actualCol));
-              batch.set(txInRef, { ...payload, type: 'INCOME', wallet: formData.toWallet, category: 'Chuyển khoản đến', note: `Nhận từ ${formData.wallet}: ${formData.note || ''}`, createdAt: new Date().toISOString(), transferId });
-              
-              const impacts = getTransferBalanceImpact({
-                fromWallet: formData.wallet,
-                toWallet: formData.toWallet,
-                amount: payload.amount,
+              await saveTransactionToFirestore({
+                getCollectionRef,
+                getDocRef,
+                payload,
+                isTransferCreate: true,
+                transferFromWallet: formData.wallet,
+                transferToWallet: formData.toWallet,
+                transferNote: formData.note,
               });
-              
-              const wbUpdates = {};
-              for (const [w, delta] of impacts) { if (delta !== 0) wbUpdates[w] = increment(delta); }
-              if (Object.keys(wbUpdates).length > 0) batch.set(settingsRef, { walletBalances: wbUpdates }, { merge: true });
-              
-              await batch.commit();
               handleCloseModal();
               showToast('Đã luân chuyển tiền thành công!', 'success');
               if (activeTab === 'annual') setAnnualRefreshTick(v => v + 1); 
               return;
           }
           
-          // Case 2: Thu/Chi bình thường (Có hỗ trợ Sửa)
-          const impacts = editingTxId && originalTx
-            ? getTransactionUpdateBalanceImpact({ previousTransaction: originalTx, nextTransaction: payload })
-            : getTransactionBalanceImpact(payload);
-
-          if (editingTxId) {
-             const [oldY, oldM] = (originalTx?.date || '').split('-');
-             if (originalTx && `${oldY}_${oldM}` !== `${y}_${m}`) {
-                 batch.delete(getDocRef(`transactions_${oldY}_${oldM}`, editingTxId));
-                 batch.set(getDocRef(actualCol, editingTxId), payload);
-             } else {
-                 batch.update(getDocRef(actualCol, editingTxId), payload);
-             }
-          } else {
-             payload.createdAt = new Date().toISOString();
-             const newTxRef = doc(getCollectionRef(actualCol));
-             batch.set(newTxRef, payload);
-          }
-          
-          const wbUpdates = {};
-          for (const [w, delta] of impacts) { if (delta !== 0) wbUpdates[w] = increment(delta); }
-          if (Object.keys(wbUpdates).length > 0) batch.set(settingsRef, { walletBalances: wbUpdates }, { merge: true }); 
-          
-          await batch.commit();
+          await saveTransactionToFirestore({
+            getCollectionRef,
+            getDocRef,
+            payload,
+            editingTransactionId: editingTxId,
+            originalTransaction: originalTx,
+            isTransferCreate: false,
+          });
       } else {
          if (editingTxId) await updateDoc(getDocRef(colName, editingTxId), payload);
          else { payload.createdAt = new Date().toISOString(); await addDoc(getCollectionRef(colName), payload); }
@@ -500,32 +464,16 @@ export default function App() {
                  return; 
              }
              
-             const batch = writeBatch(db);
-             const settingsRef = getDocRef('settings', 'general');
-             if (txObj.transferId) {
-                 const q = query(getCollectionRef(actualCol), where("transferId", "==", txObj.transferId));
-                 const snap = await getDocs(q);
-                 let impacts = combineBalanceImpacts();
-                 snap.docs.forEach(docSnap => {
-                     impacts = combineBalanceImpacts(impacts, getTransactionDeleteBalanceImpact(docSnap.data()));
-                     batch.delete(docSnap.ref);
-                 });
-                 
-                 const wbUpdates = {};
-                 for (const [w, delta] of impacts) { if (delta !== 0) wbUpdates[w] = increment(delta); }
-                 if (Object.keys(wbUpdates).length > 0) batch.set(settingsRef, { walletBalances: wbUpdates }, { merge: true });
-                 
-                 await batch.commit();
+             const deleteResult = await deleteTransactionFromFirestore({
+               getCollectionRef,
+               getDocRef,
+               collectionName: actualCol,
+               documentId: id,
+               transaction: txObj,
+             });
+             if (deleteResult.kind === 'transfer_pair') {
                  showToast('Đã xóa toàn bộ phiếu luân chuyển!', 'success');
              } else {
-                 const impacts = getTransactionDeleteBalanceImpact(txObj);
-                 
-                 const wbUpdates = {};
-                 for (const [w, delta] of impacts) { if (delta !== 0) wbUpdates[w] = increment(delta); }
-                 if (Object.keys(wbUpdates).length > 0) batch.set(settingsRef, { walletBalances: wbUpdates }, { merge: true });
-                 
-                 batch.delete(getDocRef(actualCol, id));
-                 await batch.commit();
                  showToast('Đã xóa dữ liệu', 'success');
              }
              if (activeTab === 'annual') setAnnualRefreshTick(v => v + 1);
