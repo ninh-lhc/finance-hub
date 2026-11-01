@@ -1,16 +1,77 @@
-# React + Vite
+# Finance Hub
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Ứng dụng quản lý tài chính cá nhân (React + Vite + Firebase).
 
-Currently, two official plugins are available:
+## Yêu cầu môi trường
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Node.js** 20 trở lên (khuyến nghị cho Vite 7 và Vitest 5)
+- **npm** (đi kèm Node.js)
 
-## React Compiler
+## Chạy local
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Cài dependency:
 
-## Expanding the ESLint configuration
+```bash
+npm install
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Tạo file cấu hình local từ mẫu:
+
+**Windows PowerShell**
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+**macOS / Linux**
+
+```bash
+cp .env.example .env.local
+```
+
+Điền **Firebase web config** (từ Firebase Console → Project settings → Your apps) vào `.env.local`. Xem danh sách biến ở mục [Biến môi trường](#biến-môi-trường) bên dưới.
+
+Chạy dev server:
+
+```bash
+npm run dev
+```
+
+## Kiểm tra dự án
+
+```bash
+npm run test
+npm run lint
+npm run build
+npm run check
+```
+
+`npm run check` chạy lần lượt lint, test và build.
+
+## Biến môi trường
+
+| Biến | Mô tả |
+|------|--------|
+| `VITE_FIREBASE_API_KEY` | Firebase web API key |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Auth domain |
+| `VITE_FIREBASE_PROJECT_ID` | Project ID |
+| `VITE_FIREBASE_STORAGE_BUCKET` | Storage bucket |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Messaging sender ID |
+| `VITE_FIREBASE_APP_ID` | Firebase app ID |
+
+- **`.env.local`**: chỉ dùng trên máy local, **không commit** (đã nằm trong `.gitignore`).
+- **`.env.example`**: chỉ liệt kê tên biến, không chứa giá trị thật — dùng làm mẫu khi setup hoặc cấu hình hosting.
+
+Firebase web config không phải server private key; bảo vệ dữ liệu vẫn phụ thuộc Authentication, Firestore Security Rules và cấu hình domain được phép.
+
+## Triển khai Vercel (cấu hình, chưa deploy trong repo)
+
+1. Import repository GitHub vào [Vercel](https://vercel.com).
+2. **Framework preset:** Vite.
+3. **Build command:** `npm run build`
+4. **Output directory:** `dist`
+5. Trong **Project Settings → Environment Variables**, thêm toàn bộ biến `VITE_FIREBASE_*` (cùng tên như `.env.example`) cho môi trường Production (và Preview nếu cần).
+6. **Redeploy** sau khi thêm hoặc sửa biến môi trường.
+7. Sau khi có domain Vercel (ví dụ `*.vercel.app`), thêm domain đó vào Firebase Console → **Authentication** → **Settings** → **Authorized domains**, để đăng nhập/Auth hoạt động trên bản deploy.
+
+Không cần `vercel.json` cho SPA hiện tại nếu không dùng client-side routing cần rewrite.

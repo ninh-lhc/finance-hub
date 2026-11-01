@@ -2,14 +2,34 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAxf7IZZp3QoK4VTb3yeqztQeeJ8itzuOo",
-  authDomain: "tai-chinh-cua-toi.firebaseapp.com",
-  projectId: "tai-chinh-cua-toi",
-  storageBucket: "tai-chinh-cua-toi.firebasestorage.app",
-  messagingSenderId: "201177266866",
-  appId: "1:201177266866:web:d539f9300f46a0d45567ab"
+const requiredFirebaseEnv = {
+  VITE_FIREBASE_API_KEY: import.meta.env.VITE_FIREBASE_API_KEY,
+  VITE_FIREBASE_AUTH_DOMAIN: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  VITE_FIREBASE_PROJECT_ID: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  VITE_FIREBASE_STORAGE_BUCKET: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  VITE_FIREBASE_MESSAGING_SENDER_ID: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  VITE_FIREBASE_APP_ID: import.meta.env.VITE_FIREBASE_APP_ID,
 };
+
+const missingFirebaseEnv = Object.entries(requiredFirebaseEnv)
+  .filter(([, value]) => !value)
+  .map(([key]) => key);
+
+if (missingFirebaseEnv.length > 0) {
+  throw new Error(
+    `Missing Firebase environment variables: ${missingFirebaseEnv.join(', ')}`,
+  );
+}
+
+const firebaseConfig = {
+  apiKey: requiredFirebaseEnv.VITE_FIREBASE_API_KEY,
+  authDomain: requiredFirebaseEnv.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: requiredFirebaseEnv.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: requiredFirebaseEnv.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: requiredFirebaseEnv.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: requiredFirebaseEnv.VITE_FIREBASE_APP_ID,
+};
+
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
