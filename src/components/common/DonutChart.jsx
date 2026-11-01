@@ -3,17 +3,22 @@ import utils from '../../utils/format.js';
 
 const DonutChart = ({ data, total, centerLabel, onItemClick, isDark = false }) => {
   if (!data || data.length === 0 || total === 0) return <div className="flex flex-col items-center justify-center h-full opacity-20 py-6"><PieChart size={32} /><p className="text-[10px] font-bold uppercase mt-2">Dữ liệu trống</p></div>;
-  let cumulativePercent = 0;
   const getCoords = (percent) => [Math.cos(2 * Math.PI * percent), Math.sin(2 * Math.PI * percent)];
+
+  const arcSlices = data.reduce((acc, slice, i) => {
+    const slicePercent = slice.value / total;
+    if (slicePercent <= 0) return acc;
+    const startP = acc.length > 0 ? acc[acc.length - 1].endP : 0;
+    const endP = startP + slicePercent;
+    acc.push({ slice, startP, endP, slicePercent, i });
+    return acc;
+  }, []);
 
   return (
     <div className="flex flex-col items-center justify-center gap-6 h-full">
       <div className="relative w-36 h-36 flex-shrink-0">
         <svg viewBox="-1.1 -1.1 2.2 2.2" className="transform -rotate-90 w-full h-full drop-shadow-md">
-          {data.map((slice, i) => {
-            const slicePercent = slice.value / total;
-            if (slicePercent <= 0) return null;
-            const startP = cumulativePercent; cumulativePercent += slicePercent; const endP = cumulativePercent;
+          {arcSlices.map(({ slice, startP, endP, slicePercent, i }) => {
             const [sX, sY] = getCoords(startP); const [eX, eY] = getCoords(endP);
             const largeArc = slicePercent > 0.5 ? 1 : 0;
             return <path
