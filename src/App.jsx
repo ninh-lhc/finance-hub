@@ -7,6 +7,7 @@ import {
   getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged
 } from 'firebase/auth';
 import GoogleUpgradeButton from './components/GoogleUpgradeButton.jsx';
+import ProgressBar from './components/common/ProgressBar.jsx';
 import utils from './utils/format.js';
 import { THEME, CHART_COLORS } from './constants/theme.js';
 import { 
@@ -51,15 +52,6 @@ const NavbarItem = ({ id, icon: Icon, label, activeTab, setActiveTab }) => (
     )}
   </button>
 );
-
-const ProgressBar = ({ value, max, color = THEME.primary, height = 'h-1.5', className = '' }) => {
-  const percent = utils.calculateProgress(value, max);
-  return (
-    <div className={`w-full bg-[#E9EDF7] rounded-full ${height} overflow-hidden ${className}`}>
-      <div className="rounded-full transition-all duration-700 ease-out h-full" style={{ width: `${percent}%`, backgroundColor: color }}></div>
-    </div>
-  );
-};
 
 const DonutChart = ({ data, total, centerLabel, onItemClick, isDark = false }) => {
   if (!data || data.length === 0 || total === 0) return <div className="flex flex-col items-center justify-center h-full opacity-20 py-6"><PieChart size={32} /><p className="text-[10px] font-bold uppercase mt-2">Dữ liệu trống</p></div>;
