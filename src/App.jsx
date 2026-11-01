@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth';
 import GoogleUpgradeButton from './components/GoogleUpgradeButton.jsx';
 import utils from './utils/format.js';
+import { THEME, CHART_COLORS } from './constants/theme.js';
 import { 
   LayoutDashboard, ArrowRightLeft, Wallet, PieChart, Target, 
   Plus, Search, Filter, ChevronDown, Bell, Settings, 
@@ -33,23 +34,6 @@ const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
 const baseAppId = 'tai-chinh-cua-toi';
-
-
-const THEME = {
-  primary: '#4318FF',
-  success: '#05CD99',
-  error: '#EE5D50',
-  warning: '#FFCE20',
-  navy: '#111C44',
-  textMain: '#2B3674',
-  textGray: '#A3AED0',
-  bgMain: '#F4F7FE'
-};
-
-const CHART_COLORS = [
-  '#4318FF', '#00E396', '#FEB019', '#FF4560', '#775DD0', 
-  '#008FFB', '#FE6A35', '#D4526E', '#13D8AA', '#A5978B'
-];
 
 // ==========================================
 // 3. THÀNH PHẦN GIAO DIỆN
