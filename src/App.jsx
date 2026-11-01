@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
-  collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, increment
+  collection, addDoc, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, query, where, writeBatch, increment
 } from 'firebase/firestore';
 import { auth, db, baseAppId } from './services/firebase/config.js';
 import useAuthUser from './hooks/useAuthUser.js';
 import useFirestoreRefs from './hooks/useFirestoreRefs.js';
+import useFinanceSettings from './hooks/useFinanceSettings.js';
+import useMonthlyFinanceData from './hooks/useMonthlyFinanceData.js';
+import useAnnualTransactions from './hooks/useAnnualTransactions.js';
 import GoogleUpgradeButton from './components/GoogleUpgradeButton.jsx';
 import ProgressBar from './components/common/ProgressBar.jsx';
 import DonutChart from './components/common/DonutChart.jsx';
@@ -60,20 +63,24 @@ export default function App() {
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-
-  const [transactions, setTransactions] = useState([]); 
-  const [annualTransactions, setAnnualTransactions] = useState([]); 
-  const [isFetchingAnnual, setIsFetchingAnnual] = useState(false);
-  const [walletBalances, setWalletBalances] = useState({}); 
   const [annualRefreshTick, setAnnualRefreshTick] = useState(0);
 
-  const [goals, setGoals] = useState([]);
-  const [budgets, setBudgets] = useState([]);
-  const [categories, setCategories] = useState({
-    INCOME: ['Lương', 'Thưởng', 'Đầu tư', 'Số dư đầu kỳ', 'Thu nợ/Hoàn ứng'],
-    EXPENSE: ['Ăn uống', 'Di chuyển', 'Mua sắm', 'Giải trí', 'Hóa đơn', 'Chi hộ']
+  const { categories, wallets, walletBalances } = useFinanceSettings({ user, getDocRef, syncCode });
+  const { transactions, goals, budgets } = useMonthlyFinanceData({
+    user,
+    syncCode,
+    selectedYear,
+    selectedMonth,
+    getCollectionRef,
   });
-  const [wallets, setWallets] = useState(['Tiền mặt', 'Ví ngân hàng', 'Thẻ tín dụng']);
+  const { annualTransactions, isFetchingAnnual } = useAnnualTransactions({
+    user,
+    syncCode,
+    activeTab,
+    selectedYear,
+    annualRefreshTick,
+    getCollectionRef,
+  });
 
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
@@ -115,77 +122,6 @@ export default function App() {
     }
     setIsProcessing(false);
   };
-
-  // Lắng nghe cài đặt chung (Ví, Danh mục)
-  useEffect(() => {
-    if (!user) return;
-    const unsubSettings = onSnapshot(
-      getDocRef('settings', 'general'),
-      (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.categories) setCategories(data.categories);
-          if (data.wallets) setWallets(data.wallets);
-          if (data.walletBalances) setWalletBalances(data.walletBalances);
-        }
-      },
-      (err) => console.error("Lỗi tải cấu hình:", err)
-    );
-    return () => unsubSettings();
-  }, [user, syncCode, getDocRef]);
-
-  // Lắng nghe dữ liệu theo Tháng được chọn
-  useEffect(() => {
-    if (!user) return;
-    setTransactions([]);
-    
-    const monthStr = String(selectedMonth + 1).padStart(2, '0');
-    const targetColName = `transactions_${selectedYear}_${monthStr}`;
-
-    const unsubTrans = onSnapshot(
-      getCollectionRef(targetColName), 
-      (s) => setTransactions(s.docs.map(d => ({ id: d.id, ...d.data() }))),
-      (err) => console.error("Lỗi tải giao dịch tháng:", err)
-    );
-    
-    const unsubGoals = onSnapshot(getCollectionRef('goals'), (s) => setGoals(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubBudgets = onSnapshot(getCollectionRef('budgets'), (s) => setBudgets(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-
-    return () => { unsubTrans(); unsubGoals(); unsubBudgets(); };
-  }, [user, syncCode, selectedYear, selectedMonth, getCollectionRef]);
-
-  // Lấy toàn bộ dữ liệu năm khi vào tab Annual
-  useEffect(() => {
-    if (!user || activeTab !== 'annual') return;
-    let isMounted = true;
-    setIsFetchingAnnual(true);
-    
-    const fetchAnnualData = async () => {
-      let allYearTx = [];
-      try {
-        const promises = [];
-        for(let m = 1; m <= 12; m++) {
-           const colName = `transactions_${selectedYear}_${String(m).padStart(2, '0')}`;
-           promises.push(getDocs(getCollectionRef(colName)));
-        }
-        const results = await Promise.all(promises);
-        results.forEach(snap => {
-           snap.forEach(d => allYearTx.push({id: d.id, ...d.data()}));
-        });
-        
-        if (isMounted) {
-           setAnnualTransactions(allYearTx);
-           setIsFetchingAnnual(false);
-        }
-      } catch(err) {
-        console.error("Lỗi khi tải dữ liệu năm:", err);
-        if(isMounted) setIsFetchingAnnual(false);
-      }
-    };
-    
-    fetchAnnualData();
-    return () => { isMounted = false; };
-  }, [user, syncCode, activeTab, selectedYear, annualRefreshTick, getCollectionRef]);
 
   // ==========================================
   // 6. BUSINESS LOGIC (USEMEMO)
