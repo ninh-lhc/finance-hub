@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// TARGET RULES — NOT DEPLOYED.
+// Deploying now would block legacy public sync (artifacts/.../public/data/sync_*).
+// Migrate data off public sync before production deploy.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isExpectedApp(appId) {
+      return appId == 'tai-chinh-cua-toi';
+    }
+
+    match /artifacts/{appId}/users/{userId}/{document=**} {
+      allow read, write: if isExpectedApp(appId) && isOwner(userId);
+    }
+
+    match /artifacts/{appId}/public/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

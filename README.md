@@ -75,3 +75,42 @@ Firebase web config không phải server private key; bảo vệ dữ liệu v�
 7. Sau khi có domain Vercel (ví dụ `*.vercel.app`), thêm domain đó vào Firebase Console → **Authentication** → **Settings** → **Authorized domains**, để đăng nhập/Auth hoạt động trên bản deploy.
 
 Không cần `vercel.json` cho SPA hiện tại nếu không dùng client-side routing cần rewrite.
+
+## Firestore Security Rules
+
+File rules mục tiêu: [`firestore.rules`](firestore.rules). Cấu hình emulator: [`firebase.json`](firebase.json) (Firestore emulator port **8080**).
+
+**Cảnh báo:** Đây là **target rules** và **CHƯA được deploy** lên production. Deploy ngay sẽ **vô hiệu hóa legacy public sync** (`artifacts/.../public/data/sync_*`). Cần **migration dữ liệu** khỏi public sync trước khi deploy production. Production **chưa** được bảo vệ bởi rules mới cho đến khi deploy có chủ đích.
+
+Rules mục tiêu:
+
+- Chỉ user đã đăng nhập (`request.auth != null`) mới truy cập dữ liệu UID.
+- Mỗi user chỉ đọc/ghi dưới `artifacts/tai-chinh-cua-toi/users/{ownUid}/...` (anonymous authenticated UID được coi như owner của chính UID đó).
+- Cross-user và sai namespace app bị từ chối.
+- Legacy public sync path bị **deny** (read/write).
+
+### Chạy rules tests
+
+Firestore Emulator cần **Java**. Môi trường dev đã được kiểm chứng với **Eclipse Temurin JDK 21** (OpenJDK 21 LTS). Rules tests dùng project emulator giả `demo-finance-hub-rules-test` (không phải production project).
+
+```bash
+npm run test:rules
+```
+
+Chạy lint + unit tests + build + rules tests:
+
+```bash
+npm run check:all
+```
+
+`npm run test` vẫn chỉ chạy Vitest (không khởi động emulator).
+
+### Deploy tham khảo (không chạy trong repo)
+
+Sau khi migration legacy sync xong, deploy rules/indexes **chỉ khi đã review**:
+
+```bash
+npx firebase deploy --only firestore:rules,firestore:indexes --project tai-chinh-cua-toi
+```
+
+Không có `.firebaserc` trong repo; lệnh trên chỉ mang tính tham khảo.
