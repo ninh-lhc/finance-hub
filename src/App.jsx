@@ -20,6 +20,11 @@ import utils from './utils/format.js';
 import { deriveFinanceLogic, deriveTransactionView } from './logic/deriveFinance.js';
 import { buildDataSourceDiagnostics } from './logic/dataSourceDiagnostics.js';
 import {
+  parseFinanceCsv,
+  serializeFinanceCsv,
+  serializeFinanceImportSampleCsv,
+} from './logic/financeCsv.js';
+import {
   saveTransactionToFirestore,
   deleteTransactionFromFirestore,
 } from './services/finance/transactionService.js';
@@ -577,12 +582,7 @@ export default function App() {
     const sourceData = isAnnualExport ? annualTransactions : logic.filteredTransactions;
     if (sourceData.length === 0) { showToast('Không có dữ liệu để xuất!', 'warning'); return; }
 
-    const headers = ['Ngày', 'Nội dung', 'Phân loại', 'Danh mục', 'Nguồn tiền', 'Số tiền (VND)'];
-    const rows = [...sourceData].sort((a,b) => new Date(b.date) - new Date(a.date)).map(t => {
-      return [utils.formatDisplayDate(t.date), `"${(t.note || '').replace(/"/g, '""')}"`, t.type === 'INCOME' ? 'Thu nhập' : 'Chi tiêu', t.category, t.linkedWallet || t.wallet, t.amount];
-    });
-    
-    const csvContent = '\uFEFF' + [headers, ...rows].map(e => e.join(',')).join('\n');
+    const csvContent = serializeFinanceCsv({ transactions: sourceData });
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a'); link.href = url; 
@@ -592,13 +592,7 @@ export default function App() {
   };
 
   const handleDownloadSampleCSV = () => {
-    const headers = ['Ngày (DD/MM/YYYY)', 'Nội dung', 'Phân loại (Thu nhập/Chi tiêu)', 'Danh mục', 'Nguồn tiền', 'Số tiền (VND)'];
-    const sampleRows = [
-        ['01/02/2025', 'Nạp tiền gốc', 'Thu nhập', 'Số dư đầu kỳ', 'Ví ngân hàng', '5000000'],
-        ['25/02/2025', 'Lương tháng 2', 'Thu nhập', 'Lương', 'Tiền mặt', '15000000'],
-        ['26/02/2025', 'Mua sắm siêu thị', 'Chi tiêu', 'Mua sắm', 'Ví ngân hàng', '500000']
-    ];
-    const csvContent = '\uFEFF' + [headers, ...sampleRows].map(e => e.map(i => `"${i}"`).join(',')).join('\n');
+    const csvContent = serializeFinanceImportSampleCsv();
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a'); link.href = url; 
@@ -617,76 +611,14 @@ export default function App() {
     reader.onload = async (e) => {
         try {
             const text = e.target.result;
-            const rows = text.split('\n').filter(row => row.trim() !== '');
-            if (rows.length < 2) throw new Error("File trống");
-
-            const payloads = [];
-            const totalImpact = {};
-            let validCount = 0;
-            let lastImportedDate = null; 
-            
-            const newWalletsSet = new Set(wallets || []);
-            const newIncCats = new Set(categories?.INCOME || []);
-            const newExpCats = new Set(categories?.EXPENSE || []);
-
-            const parseCSVLine = (line) => {
-                let cols = [], cur = '', inQuotes = false;
-                for (let i = 0; i < line.length; i++) {
-                    if (line[i] === '"') inQuotes = !inQuotes;
-                    else if (line[i] === ',' && !inQuotes) { cols.push(cur.trim()); cur = ''; }
-                    else cur += line[i];
-                }
-                cols.push(cur.trim().replace(/^"|"$/g, ''));
-                return cols.map(c => c.replace(/^"|"$/g, ''));
-            };
-
-            for (let i = 1; i < rows.length; i++) {
-                const cols = parseCSVLine(rows[i]);
-                if (cols.length < 6) continue;
-                
-                let [dateStr, note, typeStr, category, wallet, amountStr] = cols;
-                
-                let date = dateStr;
-                if (dateStr.includes('/')) {
-                   const parts = dateStr.split('/');
-                   if (parts.length === 3) date = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
-                } else if (dateStr.includes('-')) {
-                   const parts = dateStr.split('-');
-                   if (parts[0].length !== 4 && parts.length === 3) date = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
-                }
-                if (!date || date.length !== 10) continue; 
-
-                const type = String(typeStr).toLowerCase().includes('thu') ? 'INCOME' : 'EXPENSE';
-                const amount = Number(String(amountStr).replace(/[^0-9]/g, ''));
-                category = category || 'Khác';
-                wallet = wallet || 'Tiền mặt';
-                
-                if (isNaN(amount) || amount <= 0) continue;
-
-                const [y, m] = date.split('-');
-                const colName = `transactions_${y}_${m}`;
-
-                payloads.push({
-                    col: colName,
-                    data: {
-                        type, category, amount, wallet, date, note: note || '',
-                        createdAt: new Date().toISOString(), isSample: false
-                    }
-                });
-
-                if (type === 'INCOME') {
-                    totalImpact[wallet] = (totalImpact[wallet] || 0) + amount;
-                    newIncCats.add(category);
-                } else {
-                    totalImpact[wallet] = (totalImpact[wallet] || 0) - amount;
-                    newExpCats.add(category);
-                }
-                newWalletsSet.add(wallet);
-                validCount++;
-                lastImportedDate = date; 
+            const parsed = parseFinanceCsv(text, { wallets, categories });
+            if (parsed.validCount === 0) {
+              const firstError = parsed.errors[0]?.message || 'Không có dữ liệu hợp lệ';
+              throw new Error(firstError);
             }
 
-            if (validCount === 0) throw new Error("Không có dữ liệu hợp lệ");
+            const payloads = parsed.rows;
+            const { totalImpact, validCount, lastImportedDate, newWallets, newIncCats, newExpCats } = parsed;
 
             const chunkSize = 450;
             for (let i = 0; i < payloads.length; i += chunkSize) {
@@ -705,8 +637,8 @@ export default function App() {
             });
 
             const wbUpdates = {
-                wallets: Array.from(newWalletsSet),
-                categories: { INCOME: Array.from(newIncCats), EXPENSE: Array.from(newExpCats) }
+                wallets: newWallets,
+                categories: { INCOME: newIncCats, EXPENSE: newExpCats },
             };
             
             if (Object.keys(walletUpdates).length > 0) {
