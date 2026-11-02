@@ -3,6 +3,7 @@ import {
   Save, Plus, Edit2, RotateCcw, Landmark
 } from 'lucide-react';
 import GoogleUpgradeButton from '../../components/GoogleUpgradeButton.jsx';
+import DataSourceDiagnostics from './DataSourceDiagnostics.jsx';
 import utils from '../../utils/format.js';
 
 export default function SettingsView(props) {
@@ -34,6 +35,7 @@ export default function SettingsView(props) {
     handleSaveCategory,
     handleSaveGoal,
     resetWalletBalance,
+    dataSourceDiagnostics,
   } = props;
 
   return (
@@ -49,6 +51,8 @@ export default function SettingsView(props) {
         {activeSettingTab === 'sync' && (
           <div className="space-y-8 animate-in fade-in">
             <div className="space-y-1"><h3 className="text-base font-black uppercase tracking-widest text-[#1B2559]">Đồng bộ đa thiết bị</h3><p className="text-[10px] text-gray-400 font-bold uppercase italic">Dùng chung dữ liệu mà không cần tạo tài khoản mật khẩu</p></div>
+
+            <DataSourceDiagnostics diagnostics={dataSourceDiagnostics} />
 
             <GoogleUpgradeButton auth={auth} user={user} onToast={showToast} disabled={isProcessing} />
 

@@ -18,6 +18,7 @@ import SettingsView from './features/settings/SettingsView.jsx';
 import TransactionModal from './features/transactions/TransactionModal.jsx';
 import utils from './utils/format.js';
 import { deriveFinanceLogic, deriveTransactionView } from './logic/deriveFinance.js';
+import { buildDataSourceDiagnostics } from './logic/dataSourceDiagnostics.js';
 import {
   saveTransactionToFirestore,
   deleteTransactionFromFirestore,
@@ -80,6 +81,34 @@ export default function App() {
     annualRefreshTick,
     getCollectionRef,
   });
+
+  const dataSourceDiagnostics = useMemo(
+    () =>
+      buildDataSourceDiagnostics({
+        user,
+        syncCode,
+        selectedYear,
+        selectedMonth,
+        transactions,
+        wallets,
+        categories,
+        walletBalances,
+        goals,
+        budgets,
+      }),
+    [
+      user,
+      syncCode,
+      selectedYear,
+      selectedMonth,
+      transactions,
+      wallets,
+      categories,
+      walletBalances,
+      goals,
+      budgets,
+    ],
+  );
 
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
@@ -948,6 +977,7 @@ export default function App() {
               handleSaveCategory={handleSaveCategory}
               handleSaveGoal={handleSaveGoal}
               resetWalletBalance={resetWalletBalance}
+              dataSourceDiagnostics={dataSourceDiagnostics}
             />
          )}
       </main>

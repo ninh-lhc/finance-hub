@@ -105,6 +105,19 @@ npm run check:all
 
 `npm run test` vẫn chỉ chạy Vitest (không khởi động emulator).
 
+## Chẩn đoán nguồn dữ liệu
+
+Trước khi lên kế hoạch migration khỏi legacy public sync, có thể so sánh trạng thái **chỉ đọc** trên từng thiết bị (không ghi Firestore, không đọc thêm query chẩn đoán):
+
+1. Mở **Cài đặt** → tab **Đồng bộ**.
+2. Xem panel **Chẩn đoán dữ liệu và đồng bộ**: kiểu đăng nhập, nguồn dữ liệu (UID vs phòng cũ), UID/mã đồng bộ **đã che**, kỳ đang quan sát và các count của phiên hiện tại.
+3. **Không** gửi full UID hoặc full mã đồng bộ cho người khác — chỉ so sánh dạng đã che (ví dụ laptop vs điện thoại).
+4. So sánh laptop và điện thoại: masked UID giống hay khác, cùng chế độ legacy sync hay không, count tháng hiện tại có tương đồng không.
+5. Trong lúc chẩn đoán, **không** bấm tạo phòng, tham gia phòng, ngắt kết nối, hay liên kết/đăng nhập Google.
+6. Security Rules mục tiêu trong repo **vẫn chưa deploy** — deploy sớm sẽ chặn legacy public sync.
+
+Masked UID giống nhau **không** đủ để chứng minh toàn bộ lịch sử giống nhau; đây chỉ là tín hiệu chẩn đoán trên dữ liệu đang tải.
+
 ### Deploy tham khảo (không chạy trong repo)
 
 Sau khi migration legacy sync xong, deploy rules/indexes **chỉ khi đã review**:
