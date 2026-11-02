@@ -76,6 +76,15 @@ Firebase web config không phải server private key; bảo vệ dữ liệu v�
 
 Không cần `vercel.json` cho SPA hiện tại nếu không dùng client-side routing cần rewrite.
 
+## Google Authentication setup
+
+1. **Bật Google provider:** Firebase Console → **Authentication** → **Sign-in method** → **Google** → Enable (chọn support email nếu Firebase yêu cầu).
+2. **Local development:** Trong **Authentication** → **Settings** → **Authorized domains**, đảm bảo có `localhost` (mặc định thường đã có; thêm nếu thiếu).
+3. **Vercel:** Sau khi có domain production (ví dụ `*.vercel.app`), thêm domain đó vào **Authorized domains** — cùng bước với mục Vercel ở trên.
+4. Ứng dụng Vite **không** dùng Google OAuth client secret trên frontend; chỉ cần Firebase web config (`VITE_FIREBASE_*`).
+5. Không commit giá trị cấu hình Firebase thật vào repo.
+6. Đăng nhập Google bằng popup cần được kiểm thử thủ công trên từng origin (localhost, sau này Vercel); repo không khẳng định E2E Google Auth đã pass nếu chưa hoàn tất popup thật.
+
 ## Firestore Security Rules
 
 File rules mục tiêu: [`firestore.rules`](firestore.rules). Cấu hình emulator: [`firebase.json`](firebase.json) (Firestore emulator port **8080**).

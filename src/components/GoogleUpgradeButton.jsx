@@ -4,6 +4,10 @@ import {
   linkAnonymousUserWithGoogle,
   signInWithExistingGoogleAccount,
 } from '../services/firebase/googleAuthService.js';
+import {
+  fromLegacyAuthAction,
+  getGoogleAuthErrorPresentation,
+} from '../logic/googleAuthError.js';
 
 const EXISTING_SIGN_IN_CONFIRM =
   'Dữ liệu của phiên ẩn danh trên thiết bị này sẽ không được tự động gộp vào tài khoản Google.\n\n' +
@@ -16,66 +20,30 @@ function getGoogleDisplayLabel(user) {
   return user.displayName || googleProvider?.email || user.email || 'Google';
 }
 
-function resolveGoogleAuthToast(error, action) {
-  const code = error?.code;
-
-  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
-    return null;
-  }
-  if (code === 'auth/popup-blocked') {
-    return { message: 'Trình duyệt đang chặn popup. Hãy cho phép popup rồi thử lại.', type: 'warning' };
-  }
-  if (code === 'auth/network-request-failed') {
-    return { message: 'Lỗi mạng. Vui lòng kiểm tra kết nối và thử lại.', type: 'error' };
-  }
-  if (code === 'auth/operation-not-allowed') {
-    return { message: 'Đăng nhập Google chưa được bật cho dự án Firebase này.', type: 'error' };
-  }
-  if (
-    code === 'auth/credential-already-in-use' ||
-    code === 'auth/email-already-in-use' ||
-    code === 'auth/account-exists-with-different-credential'
-  ) {
-    if (action === 'link') {
-      return {
-        message:
-          'Gmail này đã được liên kết với dữ liệu khác. Hãy dùng "Đăng nhập tài khoản Google đã có" nếu muốn mở dữ liệu đó.',
-        type: 'error',
-      };
-    }
-    return { message: 'Không thể đăng nhập Google lúc này. Vui lòng thử lại.', type: 'error' };
-  }
-  if (code === 'auth/uid-changed-after-link') {
-    return { message: 'Lỗi bảo toàn UID: UID sau khi liên kết không khớp UID trước đó.', type: 'error' };
-  }
-  if (code === 'auth/not-anonymous' || code === 'auth/no-current-user') {
-    return { message: 'Phiên đăng nhập hiện tại không thể liên kết dữ liệu.', type: 'error' };
-  }
-  return { message: 'Không thể hoàn tất thao tác Google lúc này. Vui lòng thử lại.', type: 'error' };
-}
-
 export default function GoogleUpgradeButton({ auth, user, onToast, disabled }) {
   const [processingAction, setProcessingAction] = useState(null);
 
   const isBusy = Boolean(processingAction);
   const buttonsDisabled = disabled || isBusy || !user;
 
-  const runAuthAction = async (action, fn) => {
+  const runAuthAction = async (legacyAction, fn) => {
     if (!user || isBusy || disabled) return;
-    setProcessingAction(action);
+    setProcessingAction(legacyAction);
     try {
       await fn();
-      if (action === 'link') {
+      if (legacyAction === 'link') {
         onToast('Đã liên kết dữ liệu hiện tại với Google. UID được giữ nguyên.', 'success');
       } else {
         onToast('Đã đăng nhập tài khoản Google.', 'success');
       }
     } catch (error) {
-      if (import.meta.env.DEV && error?.code) {
-        console.error(`Google auth (${action}) error code:`, error.code);
+      const presentation = getGoogleAuthErrorPresentation({
+        error,
+        action: fromLegacyAuthAction(legacyAction),
+      });
+      if (!presentation.silent && presentation.message) {
+        onToast(presentation.message, presentation.severity);
       }
-      const toast = resolveGoogleAuthToast(error, action);
-      if (toast) onToast(toast.message, toast.type);
     } finally {
       setProcessingAction(null);
     }
