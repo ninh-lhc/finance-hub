@@ -49,6 +49,10 @@ import {
   recalculateWalletBalancesInFirestore,
   resetWalletBalanceInFirestore,
 } from './services/finance/balanceMaintenanceService.js';
+import {
+  generateSampleDataInFirestore,
+  clearSampleDataFromFirestore,
+} from './services/finance/sampleDataService.js';
 
 // ==========================================
 // MAIN APP COMPONENT
@@ -263,70 +267,12 @@ export default function App() {
     generateSampleData: async () => {
       if (!user || isProcessing) return;
       setIsProcessing(true);
-      const batch = writeBatch(db);
       try {
-        const expenses = ['Ăn uống', 'Di chuyển', 'Mua sắm', 'Hóa đơn'];
-        let totalImpact = {};
-        wallets.forEach(w => totalImpact[w] = 0);
-
-        // Khởi tạo số dư đầu kỳ cho các ví
-        const colJan = getCollectionRef('transactions_2025_01');
-        wallets.forEach((w, i) => {
-          const amt = 10000000 + (i * 5000000); // Khởi tạo 10tr, 15tr, 20tr... để tránh âm ví
-          totalImpact[w] += amt;
-          batch.set(doc(colJan), {
-            type: 'INCOME', category: 'Số dư đầu kỳ', amount: amt, wallet: w,
-            date: '2025-01-01', note: `Khởi tạo số dư ví ${w}`, createdAt: new Date().toISOString(), isSample: true
-          });
+        await generateSampleDataInFirestore({
+          getCollectionRef,
+          getDocRef,
+          wallets,
         });
-
-        for (let m = 1; m <= 12; m++) {
-          const mStr = String(m).padStart(2, '0');
-          const colRef = getCollectionRef(`transactions_2025_${mStr}`);
-          
-          // Tạo thu nhập chính (Lương) đổ vào Ví thứ 2 (Ví ngân hàng)
-          const incomeBank = wallets.length > 1 ? wallets[1] : wallets[0];
-          const salary = 15000000 + Math.floor(Math.random() * 5000000);
-          totalImpact[incomeBank] = (totalImpact[incomeBank] || 0) + salary;
-          batch.set(doc(colRef), {
-            type: 'INCOME', category: 'Lương', amount: salary, wallet: incomeBank,
-            date: `2025-${mStr}-05`, note: `Lương tháng ${m}`, createdAt: new Date().toISOString(), isSample: true
-          });
-
-          // Tạo thu nhập phụ (Thưởng) đổ vào Tiền mặt
-          const incomeCash = wallets[0];
-          const extraInc = 2000000 + Math.floor(Math.random() * 3000000);
-          totalImpact[incomeCash] = (totalImpact[incomeCash] || 0) + extraInc;
-          batch.set(doc(colRef), {
-            type: 'INCOME', category: 'Thưởng', amount: extraInc, wallet: incomeCash,
-            date: `2025-${mStr}-12`, note: `Thu nhập phụ tháng ${m}`, createdAt: new Date().toISOString(), isSample: true
-          });
-
-          // Tạo chi tiêu ngẫu nhiên
-          for (let i = 0; i < 6; i++) {
-            const amt = 50000 + Math.floor(Math.random() * 1000000);
-            const targetW = wallets[Math.floor(Math.random() * wallets.length)];
-            const cat = expenses[Math.floor(Math.random() * expenses.length)];
-            const day = String(Math.floor(Math.random() * 25) + 1).padStart(2, '0');
-            totalImpact[targetW] = (totalImpact[targetW] || 0) - amt;
-            batch.set(doc(colRef), {
-              type: 'EXPENSE', category: cat, amount: amt, wallet: targetW,
-              date: `2025-${mStr}-${day}`, note: `Chi tiêu mẫu ${i+1}`, createdAt: new Date().toISOString(), isSample: true
-            });
-          }
-        }
-
-        // Cập nhật số dư 1 lần duy nhất bằng setDoc với merge true
-        const settingsRef = getDocRef('settings', 'general');
-        const wbUpdates = {};
-        Object.entries(totalImpact).forEach(([w, val]) => {
-           if (val !== 0) wbUpdates[w] = increment(val);
-        });
-        if (Object.keys(wbUpdates).length > 0) {
-            batch.set(settingsRef, { walletBalances: wbUpdates }, { merge: true });
-        }
-
-        await batch.commit();
         showToast('Đã nạp dữ liệu mẫu 12 tháng năm 2025!', 'success');
         setSelectedYear(2025);
         if (activeTab === 'annual') setAnnualRefreshTick(v => v + 1);
@@ -342,61 +288,16 @@ export default function App() {
       setIsProcessing(true);
       showToast('Đang dọn dẹp dữ liệu mẫu...', 'success');
       try {
-          const currentYearObj = new Date().getFullYear();
-          const promisesToFetch = [];
-          
-          for(let y = currentYearObj - 5; y <= currentYearObj + 1; y++) {
-              for(let m = 1; m <= 12; m++) {
-                  promisesToFetch.push(getDocs(getCollectionRef(`transactions_${y}_${String(m).padStart(2,'0')}`)));
-              }
-          }
-          
-          promisesToFetch.push(getDocs(getCollectionRef('goals')));
-          promisesToFetch.push(getDocs(getCollectionRef('budgets')));
-
-          const allSnaps = await Promise.all(promisesToFetch);
-          const refsToDelete = [];
-          const impactToReverse = {};
-          
-          allSnaps.forEach(snap => {
-              snap.docs.forEach(doc => {
-                  const data = doc.data();
-                  if (data.isSample) {
-                      refsToDelete.push(doc.ref);
-                      if (data.type === 'INCOME' && data.wallet) {
-                          impactToReverse[data.wallet] = (impactToReverse[data.wallet] || 0) - Number(data.amount || 0);
-                      } else if (data.type === 'EXPENSE') {
-                          const w = data.linkedWallet || data.wallet;
-                          if (w) impactToReverse[w] = (impactToReverse[w] || 0) + Number(data.amount || 0);
-                      }
-                  }
-              });
+          const result = await clearSampleDataFromFirestore({
+            getCollectionRef,
+            getDocRef,
           });
-
-          if (refsToDelete.length === 0) {
+          if (!result.hadSamples) {
               showToast('Không có dữ liệu mẫu nào để xóa!', 'warning');
               setIsProcessing(false);
               return;
           }
-
-          const chunkSize = 450;
-          for (let i = 0; i < refsToDelete.length; i += chunkSize) {
-              const chunk = refsToDelete.slice(i, i + chunkSize);
-              const batch = writeBatch(db);
-              chunk.forEach(ref => batch.delete(ref));
-              await batch.commit();
-          }
-          
-          const wbUpdates = {};
-          Object.keys(impactToReverse).forEach(w => { 
-              if (impactToReverse[w] !== 0) wbUpdates[w] = increment(impactToReverse[w]); 
-          });
-          
-          if (Object.keys(wbUpdates).length > 0) {
-              await setDoc(getDocRef('settings', 'general'), { walletBalances: wbUpdates }, { merge: true });
-          }
-          
-          showToast(`Đã xóa sạch ${refsToDelete.length} dữ liệu mẫu!`, 'success');
+          showToast(`Đã xóa sạch ${result.deletedCount} dữ liệu mẫu!`, 'success');
           if (activeTab === 'annual') setAnnualRefreshTick(v => v + 1);
       } catch (error) {
           console.error(error);
