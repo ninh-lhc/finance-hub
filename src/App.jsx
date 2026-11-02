@@ -45,6 +45,10 @@ import {
   saveWalletToFirestore,
   saveCategoryToFirestore,
 } from './services/finance/walletCategoryService.js';
+import {
+  recalculateWalletBalancesInFirestore,
+  resetWalletBalanceInFirestore,
+} from './services/finance/balanceMaintenanceService.js';
 
 // ==========================================
 // MAIN APP COMPONENT
@@ -142,30 +146,19 @@ export default function App() {
     setIsProcessing(true);
     showToast('Đang kiểm tra lịch sử giao dịch...', 'success');
     try {
-      const currentYearObj = new Date().getFullYear();
-      const promises = [];
-      for(let y = currentYearObj - 5; y <= currentYearObj + 1; y++) {
-          for(let m = 1; m <= 12; m++) {
-              promises.push(getDocs(getCollectionRef(`transactions_${y}_${String(m).padStart(2,'0')}`)));
-          }
+      const result = await resetWalletBalanceInFirestore({
+        getCollectionRef,
+        getDocRef,
+        walletName: wName,
+      });
+      if (result.hasReferences) {
+        showToast(`Lỗi: Ví "${wName}" đang chứa giao dịch. Không thể đưa về 0đ!`, 'warning');
+        setIsProcessing(false);
+        return;
       }
-      const results = await Promise.all(promises);
-      let hasTx = false;
-      for (const snap of results) {
-          if (snap.docs.some(doc => doc.data().wallet === wName || doc.data().linkedWallet === wName)) {
-              hasTx = true;
-              break;
-          }
+      if (result.reset) {
+        showToast(`Đã đưa số dư ${wName} về 0đ`, 'success');
       }
-
-      if (hasTx) {
-          showToast(`Lỗi: Ví "${wName}" đang chứa giao dịch. Không thể đưa về 0đ!`, 'warning');
-          setIsProcessing(false);
-          return;
-      }
-
-      await setDoc(getDocRef('settings', 'general'), { walletBalances: { [wName]: 0 } }, { merge: true });
-      showToast(`Đã đưa số dư ${wName} về 0đ`, 'success');
     } catch (err) {
       console.error(err);
       showToast('Lỗi khi thiết lập lại ví', 'error');
@@ -254,43 +247,11 @@ export default function App() {
       setIsProcessing(true);
       showToast('Đang quét và tính toán lại toàn bộ số dư...', 'success');
       try {
-          const currentYearObj = new Date().getFullYear();
-          const promisesToFetch = [];
-          for(let y = currentYearObj - 5; y <= currentYearObj + 1; y++) {
-              for(let m = 1; m <= 12; m++) {
-                  promisesToFetch.push(getDocs(getCollectionRef(`transactions_${y}_${String(m).padStart(2,'0')}`)));
-              }
-          }
-          const allSnaps = await Promise.all(promisesToFetch);
-          
-          const exactBalances = {};
-
-          allSnaps.forEach(snap => {
-              snap.docs.forEach(doc => {
-                  const data = doc.data();
-                  const wIn = data.type === 'INCOME' ? data.wallet : null;
-                  const wOut = data.type === 'EXPENSE' ? (data.linkedWallet || data.wallet) : null;
-                  
-                  if (wIn) exactBalances[wIn] = (exactBalances[wIn] || 0) + Number(data.amount || 0);
-                  if (wOut) exactBalances[wOut] = (exactBalances[wOut] || 0) - Number(data.amount || 0);
-              });
+          await recalculateWalletBalancesInFirestore({
+            getCollectionRef,
+            getDocRef,
+            wallets,
           });
-
-          // Đảm bảo tất cả các ví hiện tại đều có mặt trong danh sách cập nhật
-          (wallets || []).forEach(w => {
-              if (exactBalances[w] === undefined) exactBalances[w] = 0;
-          });
-
-          const settingsRef = getDocRef('settings', 'general');
-          const snapSettings = await getDoc(settingsRef);
-          
-          if (snapSettings.exists()) {
-              // Ghi đè hoàn toàn để xóa triệt để số dư của các ví "bóng ma" đã bị xóa
-              await updateDoc(settingsRef, { walletBalances: exactBalances });
-          } else {
-              await setDoc(settingsRef, { walletBalances: exactBalances }, { merge: true });
-          }
-
           showToast('Đã tính toán lại số dư chuẩn xác 100%!', 'success');
       } catch (error) {
           console.error(error);
