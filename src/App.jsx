@@ -40,6 +40,11 @@ import {
   deleteBudgetFromFirestore,
   deleteGoalFromFirestore,
 } from './services/finance/planningService.js';
+import { isWalletFormReady, isCategoryFormReady } from './logic/walletCategoryEntities.js';
+import {
+  saveWalletToFirestore,
+  saveCategoryToFirestore,
+} from './services/finance/walletCategoryService.js';
 
 // ==========================================
 // MAIN APP COMPONENT
@@ -701,86 +706,36 @@ export default function App() {
   };
 
   const handleSaveWallet = async () => {
-     if(!settingsForm.walletName) return;
-     const cleanName = settingsForm.walletName.trim();
-     let newWallets = editingId !== null ? [...(wallets||[])] : [...(wallets||[]), cleanName];
-     
-     if(editingId !== null) {
-         const oldName = wallets[editingId];
-         newWallets[editingId] = cleanName;
-         if (oldName !== cleanName) {
-             const currentYearObj = new Date().getFullYear();
-             const promises = [];
-             for(let y = currentYearObj - 5; y <= currentYearObj + 1; y++) {
-                 for(let m = 1; m <= 12; m++) {
-                     promises.push(getDocs(getCollectionRef(`transactions_${y}_${String(m).padStart(2,'0')}`)));
-                 }
-             }
-             const results = await Promise.all(promises);
-             const batch = writeBatch(db);
-             
-             let transferredBal = walletBalances[oldName] || 0;
-             batch.set(getDocRef('settings', 'general'), { 
-                 wallets: newWallets,
-                 walletBalances: {
-                     [oldName]: increment(-transferredBal),
-                     [cleanName]: increment(transferredBal)
-                 }
-             }, { merge: true });
-
-             results.forEach(snap => {
-                 snap.docs.forEach(doc => {
-                     let updates = {};
-                     if (doc.data().wallet === oldName) updates.wallet = cleanName;
-                     if (doc.data().linkedWallet === oldName) updates.linkedWallet = cleanName;
-                     if (Object.keys(updates).length > 0) batch.update(doc.ref, updates);
-                 });
-             });
-             await batch.commit();
-             cancelEdit(); showToast('Cập nhật tên ví thành công!', 'success');
-             return;
-         }
-     }
-     
-     await setDoc(getDocRef('settings', 'general'), { wallets: newWallets }, { merge: true });
-     cancelEdit(); showToast('Đã thêm ví mới!', 'success');
+     if (!isWalletFormReady(settingsForm)) return;
+     const result = await saveWalletToFirestore({
+       getCollectionRef,
+       getDocRef,
+       wallets,
+       walletBalances,
+       form: settingsForm,
+       editingId,
+     });
+     cancelEdit();
+     showToast(
+       result.outcome === 'renamed' ? 'Cập nhật tên ví thành công!' : 'Đã thêm ví mới!',
+       'success',
+     );
   };
 
   const handleSaveCategory = async () => {
-     if(!settingsForm.categoryName) return;
-     const cleanName = settingsForm.categoryName.trim();
-     const type = settingsForm.categoryType;
-     let newCatsList = editingId !== null ? [...(categories[type]||[])] : [...(categories[type]||[]), cleanName];
-     
-     if(editingId !== null) {
-         const oldName = categories[type][editingId];
-         newCatsList[editingId] = cleanName;
-         if (oldName !== cleanName) {
-             const currentYearObj = new Date().getFullYear();
-             const promises = [];
-             for(let y = currentYearObj - 5; y <= currentYearObj + 1; y++) {
-                 for(let m = 1; m <= 12; m++) {
-                     promises.push(getDocs(getCollectionRef(`transactions_${y}_${String(m).padStart(2,'0')}`)));
-                 }
-             }
-             const results = await Promise.all(promises);
-             const batch = writeBatch(db);
-             results.forEach(snap => {
-                 snap.docs.forEach(doc => {
-                     if (doc.data().category === oldName && doc.data().type === type) batch.update(doc.ref, { category: cleanName });
-                 });
-             });
-             const newCategories = { ...categories, [type]: newCatsList };
-             batch.set(getDocRef('settings', 'general'), { categories: newCategories }, { merge: true });
-             await batch.commit();
-             cancelEdit(); showToast('Cập nhật danh mục thành công!', 'success');
-             return;
-         }
-     }
-     
-     const newCategories = { ...categories, [type]: newCatsList };
-     await setDoc(getDocRef('settings', 'general'), { categories: newCategories }, { merge: true }); cancelEdit();
-     showToast('Đã lưu danh mục mới!', 'success');
+     if (!isCategoryFormReady(settingsForm)) return;
+     const result = await saveCategoryToFirestore({
+       getCollectionRef,
+       getDocRef,
+       categories,
+       form: settingsForm,
+       editingId,
+     });
+     cancelEdit();
+     showToast(
+       result.outcome === 'renamed' ? 'Cập nhật danh mục thành công!' : 'Đã lưu danh mục mới!',
+       'success',
+     );
   };
 
   const handleSaveGoal = async () => {
