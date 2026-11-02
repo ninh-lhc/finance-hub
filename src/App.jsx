@@ -28,6 +28,18 @@ import {
   saveTransactionToFirestore,
   deleteTransactionFromFirestore,
 } from './services/finance/transactionService.js';
+import {
+  isBudgetFormReady,
+  isGoalFormReady,
+  buildBudgetPayload,
+  buildGoalPayload,
+} from './logic/planningEntities.js';
+import {
+  saveBudgetToFirestore,
+  saveGoalToFirestore,
+  deleteBudgetFromFirestore,
+  deleteGoalFromFirestore,
+} from './services/finance/planningService.js';
 
 // ==========================================
 // MAIN APP COMPONENT
@@ -511,6 +523,12 @@ export default function App() {
                  showToast('Đã xóa dữ liệu', 'success');
              }
              if (activeTab === 'annual') setAnnualRefreshTick(v => v + 1);
+          } else if (col === 'budgets') {
+              await deleteBudgetFromFirestore({ getDocRef, id });
+              showToast('Đã xóa dữ liệu', 'success');
+          } else if (col === 'goals') {
+              await deleteGoalFromFirestore({ getDocRef, id });
+              showToast('Đã xóa dữ liệu', 'success');
           } else {
               await deleteDoc(getDocRef(actualCol, id));
               showToast('Đã xóa dữ liệu', 'success');
@@ -676,9 +694,9 @@ export default function App() {
   };
 
   const handleSaveBudget = async () => {
-     if (!user || !settingsForm.budgetCategory || !settingsForm.budgetAmount) return;
-     const data = { category: settingsForm.budgetCategory, amount: Number(settingsForm.budgetAmount), isSample: false };
-     if (editingId) await updateDoc(getDocRef('budgets', editingId), data); else await addDoc(getCollectionRef('budgets'), data);
+     if (!user || !isBudgetFormReady(settingsForm)) return;
+     const payload = buildBudgetPayload({ form: settingsForm });
+     await saveBudgetToFirestore({ getCollectionRef, getDocRef, payload, editingId });
      cancelEdit(); showToast('Đã lưu hạn mức ngân sách', 'success');
   };
 
@@ -766,9 +784,9 @@ export default function App() {
   };
 
   const handleSaveGoal = async () => {
-     if (!user || !settingsForm.goalName) return;
-     const data = { name: settingsForm.goalName, target: Number(settingsForm.goalAmount), amount: Number(settingsForm.goalCurrentAmount) || 0, isSample: false };
-     if (editingId) await updateDoc(getDocRef('goals', editingId), data); else await addDoc(getCollectionRef('goals'), { ...data, createdAt: new Date().toISOString() });
+     if (!user || !isGoalFormReady(settingsForm)) return;
+     const payload = buildGoalPayload({ form: settingsForm });
+     await saveGoalToFirestore({ getCollectionRef, getDocRef, payload, editingId });
      cancelEdit(); showToast('Đã lưu kế hoạch tích lũy', 'success');
   };
 
