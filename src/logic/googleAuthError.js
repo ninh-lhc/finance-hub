@@ -77,14 +77,15 @@ export function getGoogleAuthErrorPresentation({ error, action }) {
         code,
         silent: false,
         message:
-          'Gmail này đã được liên kết với dữ liệu khác. Hãy dùng "Đăng nhập tài khoản Google đã có" nếu muốn mở dữ liệu đó.',
+          'Không thể liên kết Gmail này vào phiên hiện tại. Phiên và mã phòng (nếu có) được giữ nguyên — không tự đổi UID hay gộp dữ liệu. Dùng Gmail khác, hoặc chỉ dùng "Đăng nhập tài khoản Google đã có" khi đã hiểu dữ liệu có thể khác.',
       };
     }
     return {
       severity: 'error',
       code,
       silent: false,
-      message: `Không thể đăng nhập Google lúc này. Mã lỗi: ${code}`,
+      message:
+        'Không thể đăng nhập Gmail này lúc này. Phiên hiện tại không bị thay đổi tự động — thử lại sau hoặc liên hệ hỗ trợ nếu lỗi lặp lại.',
     };
   }
 
@@ -95,14 +96,15 @@ export function getGoogleAuthErrorPresentation({ error, action }) {
         code,
         silent: false,
         message:
-          'Tài khoản đã tồn tại với phương thức đăng nhập khác. Hãy dùng "Đăng nhập tài khoản Google đã có" thay vì liên kết.',
+          'Tài khoản đã tồn tại với phương thức khác. Không tự đổi phiên hay mã phòng. Dừng lại và dùng "Đăng nhập tài khoản Google đã có" chỉ khi bạn chấp nhận mở dữ liệu theo tài khoản đó.',
       };
     }
     return {
       severity: 'error',
       code,
       silent: false,
-      message: `Không thể đăng nhập Google lúc này. Mã lỗi: ${code}`,
+      message:
+        'Không thể đăng nhập với phương thức này. Phiên hiện tại không bị thay đổi tự động — thử lại sau.',
     };
   }
 

@@ -64,12 +64,20 @@ describe('linkAnonymousUserWithGoogle', () => {
     expect(linkWithPopup).not.toHaveBeenCalled();
   });
 
-  it('propagates Firebase link errors', async () => {
+  it('propagates Firebase link errors without switching to sign-in', async () => {
     const firebaseError = new Error('Credential already in use');
     firebaseError.code = 'auth/credential-already-in-use';
     linkWithPopup.mockRejectedValue(firebaseError);
     await expect(linkAnonymousUserWithGoogle({ auth, currentUser })).rejects.toBe(firebaseError);
     expect(signInWithPopup).not.toHaveBeenCalled();
+    expect(linkWithPopup).toHaveBeenCalledTimes(1);
+    expect(linkWithPopup.mock.calls[0][0]).toBe(currentUser);
+  });
+
+  it('preserves UID on successful link', async () => {
+    linkWithPopup.mockResolvedValue({ user: { uid: 'anon-1', isAnonymous: false } });
+    const result = await linkAnonymousUserWithGoogle({ auth, currentUser });
+    expect(result.user.uid).toBe('anon-1');
   });
 });
 

@@ -8,11 +8,13 @@ import {
   fromLegacyAuthAction,
   getGoogleAuthErrorPresentation,
 } from '../logic/googleAuthError.js';
-
-const EXISTING_SIGN_IN_CONFIRM =
-  'Dữ liệu của phiên ẩn danh trên thiết bị này sẽ không được tự động gộp vào tài khoản Google.\n\n' +
-  'Sau khi đăng nhập, ứng dụng sẽ hiển thị dữ liệu của tài khoản Google đã liên kết trước đó.\n\n' +
-  'Bạn có muốn tiếp tục đăng nhập tài khoản Google đã có?';
+import {
+  canStartGoogleAuthAction,
+  getGoogleLinkSuccessMessage,
+  getGoogleSignInSuccessMessage,
+  GOOGLE_IDENTITY_ONLY_NOTE,
+  EXISTING_GOOGLE_SIGN_IN_CONFIRM,
+} from '../logic/googleAuthFlow.js';
 
 function getGoogleDisplayLabel(user) {
   if (!user) return '';
@@ -27,14 +29,14 @@ export default function GoogleUpgradeButton({ auth, user, onToast, disabled }) {
   const buttonsDisabled = disabled || isBusy || !user;
 
   const runAuthAction = async (legacyAction, fn) => {
-    if (!user || isBusy || disabled) return;
+    if (!canStartGoogleAuthAction({ user, disabled, processingAction })) return;
     setProcessingAction(legacyAction);
     try {
       await fn();
       if (legacyAction === 'link') {
-        onToast('Đã liên kết dữ liệu hiện tại với Google. UID được giữ nguyên.', 'success');
+        onToast(getGoogleLinkSuccessMessage(), 'success');
       } else {
-        onToast('Đã đăng nhập tài khoản Google.', 'success');
+        onToast(getGoogleSignInSuccessMessage(), 'success');
       }
     } catch (error) {
       const presentation = getGoogleAuthErrorPresentation({
@@ -53,7 +55,8 @@ export default function GoogleUpgradeButton({ auth, user, onToast, disabled }) {
     runAuthAction('link', () => linkAnonymousUserWithGoogle({ auth, currentUser: user }));
 
   const handleExistingSignIn = () => {
-    if (!window.confirm(EXISTING_SIGN_IN_CONFIRM)) return;
+    if (!canStartGoogleAuthAction({ user, disabled, processingAction })) return;
+    if (!window.confirm(EXISTING_GOOGLE_SIGN_IN_CONFIRM)) return;
     runAuthAction('sign-in', () => signInWithExistingGoogleAccount({ auth }));
   };
 
@@ -65,6 +68,7 @@ export default function GoogleUpgradeButton({ auth, user, onToast, disabled }) {
           <p className="text-xs text-gray-500 mt-1">
             Google đã kết nối: <span className="font-bold text-[#1B2559]">{getGoogleDisplayLabel(user)}</span>
           </p>
+          <p className="text-[10px] text-gray-400 font-bold mt-2 leading-relaxed">{GOOGLE_IDENTITY_ONLY_NOTE}</p>
         </div>
         <div className="py-3 px-6 bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-2xl text-[10px] font-black uppercase whitespace-nowrap flex items-center gap-2">
           <Cloud size={16} />
@@ -79,9 +83,10 @@ export default function GoogleUpgradeButton({ auth, user, onToast, disabled }) {
       <div>
         <h4 className="text-sm font-black text-[#1B2559] uppercase">Bảo vệ dữ liệu bằng Google</h4>
         <p className="text-xs text-gray-500 mt-1">
-          Tài khoản hiện tại đang ẩn danh trên thiết bị này. Liên kết để giữ UID và dữ liệu hiện tại, hoặc đăng
-          nhập Gmail đã dùng trên thiết bị khác.
+          Tài khoản hiện tại đang ẩn danh trên thiết bị này. Liên kết Google để giữ UID trên thiết bị này, hoặc đăng
+          nhập Gmail đã dùng trước đó.
         </p>
+        <p className="text-[10px] text-gray-400 font-bold mt-2 leading-relaxed">{GOOGLE_IDENTITY_ONLY_NOTE}</p>
       </div>
       <div className="flex flex-col sm:flex-row gap-3">
         <button

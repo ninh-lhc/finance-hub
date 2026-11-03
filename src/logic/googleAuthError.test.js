@@ -58,20 +58,22 @@ describe('getGoogleAuthErrorPresentation', () => {
     expect(result.message).toMatch(/mạng/i);
   });
 
-  it('maps auth/credential-already-in-use for link flow', () => {
+  it('maps auth/credential-already-in-use for link flow without suggesting auto merge', () => {
     const result = getGoogleAuthErrorPresentation({
       error: err('auth/credential-already-in-use'),
       action: 'link-current-data',
     });
+    expect(result.message).toMatch(/giữ nguyên/i);
     expect(result.message).toMatch(/Đăng nhập tài khoản Google đã có/);
   });
 
-  it('maps auth/credential-already-in-use for sign-in with code', () => {
+  it('maps auth/credential-already-in-use for sign-in without exposing raw code', () => {
     const result = getGoogleAuthErrorPresentation({
       error: err('auth/credential-already-in-use'),
       action: 'sign-in-existing',
     });
-    expect(result.message).toMatch(/Mã lỗi: auth\/credential-already-in-use/);
+    expect(result.message).not.toMatch(/auth\/credential-already-in-use/);
+    expect(result.message).toMatch(/Phiên hiện tại/i);
   });
 
   it('maps auth/email-already-in-use for link flow', () => {
@@ -79,7 +81,8 @@ describe('getGoogleAuthErrorPresentation', () => {
       error: err('auth/email-already-in-use'),
       action: 'link-current-data',
     });
-    expect(result.message).toMatch(/Gmail này đã được liên kết/);
+    expect(result.message).toMatch(/giữ nguyên/i);
+    expect(result.message).toMatch(/Không thể liên kết Gmail/i);
   });
 
   it('maps auth/account-exists-with-different-credential for link', () => {
@@ -87,7 +90,8 @@ describe('getGoogleAuthErrorPresentation', () => {
       error: err('auth/account-exists-with-different-credential'),
       action: 'link-current-data',
     });
-    expect(result.message).toMatch(/phương thức đăng nhập khác/i);
+    expect(result.message).toMatch(/phương thức khác/i);
+    expect(result.message).toMatch(/Dừng lại/i);
   });
 
   it('maps auth/invalid-api-key without exposing values', () => {

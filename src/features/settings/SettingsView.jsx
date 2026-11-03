@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import GoogleUpgradeButton from '../../components/GoogleUpgradeButton.jsx';
 import DataSourceDiagnostics from './DataSourceDiagnostics.jsx';
+import LegacySyncMigrationPanel from './LegacySyncMigrationPanel.jsx';
 import utils from '../../utils/format.js';
 
 export default function SettingsView(props) {
@@ -36,6 +37,10 @@ export default function SettingsView(props) {
     handleSaveGoal,
     resetWalletBalance,
     dataSourceDiagnostics,
+    legacyMigrationReadiness,
+    legacyMigrationInspection,
+    isInspectingLegacyMigration,
+    onInspectLegacyMigration,
   } = props;
 
   return (
@@ -53,6 +58,13 @@ export default function SettingsView(props) {
             <div className="space-y-1"><h3 className="text-base font-black uppercase tracking-widest text-[#1B2559]">Đồng bộ đa thiết bị</h3><p className="text-[10px] text-gray-400 font-bold uppercase italic">Dùng chung dữ liệu mà không cần tạo tài khoản mật khẩu</p></div>
 
             <DataSourceDiagnostics diagnostics={dataSourceDiagnostics} />
+
+            <LegacySyncMigrationPanel
+              readiness={legacyMigrationReadiness}
+              legacyMigrationInspection={legacyMigrationInspection}
+              isInspectingLegacyMigration={isInspectingLegacyMigration}
+              onInspect={onInspectLegacyMigration}
+            />
 
             <GoogleUpgradeButton auth={auth} user={user} onToast={showToast} disabled={isProcessing} />
 
