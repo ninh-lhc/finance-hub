@@ -53,6 +53,16 @@ import {
   generateSampleDataInFirestore,
   clearSampleDataFromFirestore,
 } from './services/finance/sampleDataService.js';
+import {
+  getLegacyMigrationReadiness,
+  canStartLegacyMigrationInspect,
+  toLegacyMigrationUiInspectionState,
+  LEGACY_MIGRATION_INSPECT_BLOCKED_MESSAGE,
+} from './logic/legacySyncMigration.js';
+import {
+  inspectLegacySyncMigration,
+  LegacyMigrationNotReadyError,
+} from './services/finance/legacySyncMigrationService.js';
 
 // ==========================================
 // MAIN APP COMPONENT
@@ -77,6 +87,8 @@ export default function App() {
   const [useLinkedWallet, setUseLinkedWallet] = useState(false);
   
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const [legacyMigrationInspection, setLegacyMigrationInspection] = useState(null);
+  const [isInspectingLegacyMigration, setIsInspectingLegacyMigration] = useState(false);
 
   const [selectedExpenseCategory, setSelectedExpenseCategory] = useState(null);
   const [, setExpandedTxId] = useState(null);
@@ -140,9 +152,64 @@ export default function App() {
     ],
   );
 
+  const legacyMigrationReadiness = useMemo(
+    () => getLegacyMigrationReadiness({ user, syncCode }),
+    [user, syncCode],
+  );
+
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000);
+  };
+
+  const handleInspectLegacyMigration = async () => {
+    const inspectGate = canStartLegacyMigrationInspect({
+      user,
+      readiness: legacyMigrationReadiness,
+      isInspecting: isInspectingLegacyMigration,
+    });
+    if (!inspectGate.allowed) {
+      if (inspectGate.reason === 'not-ready') {
+        setLegacyMigrationInspection({
+          error: true,
+          message: LEGACY_MIGRATION_INSPECT_BLOCKED_MESSAGE,
+        });
+        showToast(LEGACY_MIGRATION_INSPECT_BLOCKED_MESSAGE, 'warning');
+      }
+      return;
+    }
+
+    setIsInspectingLegacyMigration(true);
+    setLegacyMigrationInspection(null);
+    try {
+      const result = await inspectLegacySyncMigration({
+        user,
+        syncCode,
+        currentYear: selectedYear,
+      });
+      setLegacyMigrationInspection(toLegacyMigrationUiInspectionState(result));
+      showToast('Đã hoàn tất kiểm tra migration (chỉ đọc).', 'success');
+    } catch (err) {
+      if (err instanceof LegacyMigrationNotReadyError) {
+        setLegacyMigrationInspection({
+          error: true,
+          message: LEGACY_MIGRATION_INSPECT_BLOCKED_MESSAGE,
+        });
+      } else if (err?.code === 'permission-denied') {
+        setLegacyMigrationInspection({
+          error: true,
+          message: 'Firestore từ chối quyền đọc. Kiểm tra đăng nhập và quy tắc bảo mật.',
+        });
+      } else {
+        setLegacyMigrationInspection({
+          error: true,
+          message: 'Không thể hoàn tất kiểm tra. Thử lại sau.',
+        });
+      }
+      showToast('Không thể kiểm tra dữ liệu cũ.', 'warning');
+    } finally {
+      setIsInspectingLegacyMigration(false);
+    }
   };
 
   const resetWalletBalance = async (wName) => {
@@ -745,6 +812,10 @@ export default function App() {
               handleSaveGoal={handleSaveGoal}
               resetWalletBalance={resetWalletBalance}
               dataSourceDiagnostics={dataSourceDiagnostics}
+              legacyMigrationReadiness={legacyMigrationReadiness}
+              legacyMigrationInspection={legacyMigrationInspection}
+              isInspectingLegacyMigration={isInspectingLegacyMigration}
+              onInspectLegacyMigration={handleInspectLegacyMigration}
             />
          )}
       </main>
