@@ -711,7 +711,7 @@ export default function App() {
       </header>
 
       {/* --- MAIN CONTENT --- */}
-      <main className="max-w-[1400px] mx-auto p-4 md:p-8 space-y-6 pb-24 lg:pb-8">
+      <main className="max-w-[1400px] mx-auto p-4 md:p-8 space-y-6 pb-24 lg:pb-8 overflow-x-hidden">
          {/* --- DASHBOARD TAB --- */}
          {activeTab === 'dashboard' && (
             <DashboardView
