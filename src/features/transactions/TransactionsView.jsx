@@ -30,7 +30,7 @@ export default function TransactionsView(props) {
 
   return (
             <div className="space-y-6 animate-in fade-in">
-               <div className="bg-white p-8 rounded-[32px] shadow-xl border border-gray-100">
+               <div className="bg-white p-4 sm:p-8 rounded-[24px] sm:rounded-[32px] shadow-xl border border-gray-100 min-w-0">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-4">
                      <div>
                         <h3 className="text-xl font-black text-[#1B2559] uppercase tracking-tighter italic flex items-center gap-3">
@@ -71,16 +71,16 @@ export default function TransactionsView(props) {
                      <div className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">
                         <Filter size={14} /> Lọc theo:
                      </div>
-                     <select className="bg-white px-4 py-2.5 rounded-xl text-xs font-black outline-none border border-gray-100 shadow-sm text-[#1B2559] cursor-pointer" value={filterType} onChange={e => setFilterType(e.target.value)}>
+                     <select className="bg-white w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-black outline-none border border-gray-100 shadow-sm text-[#1B2559] cursor-pointer" value={filterType} onChange={e => setFilterType(e.target.value)}>
                         <option value="ALL">Tất cả giao dịch</option>
                         <option value="INCOME">Chỉ khoản Thu</option>
                         <option value="EXPENSE">Chỉ khoản Chi</option>
                      </select>
-                     <select className="bg-white px-4 py-2.5 rounded-xl text-xs font-black outline-none border border-gray-100 shadow-sm text-[#1B2559] cursor-pointer max-w-[150px] truncate" value={filterWallet} onChange={e => setFilterWallet(e.target.value)}>
+                     <select className="bg-white w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-black outline-none border border-gray-100 shadow-sm text-[#1B2559] cursor-pointer" value={filterWallet} onChange={e => setFilterWallet(e.target.value)}>
                         <option value="ALL">Tất cả Ví / Nguồn</option>
                         {(wallets || []).map(w => <option key={w} value={w}>{w}</option>)}
                      </select>
-                     <select className="bg-white px-4 py-2.5 rounded-xl text-xs font-black outline-none border border-gray-100 shadow-sm text-[#1B2559] cursor-pointer max-w-[150px] truncate" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+                     <select className="bg-white w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-black outline-none border border-gray-100 shadow-sm text-[#1B2559] cursor-pointer" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
                         <option value="ALL">Tất cả Danh mục</option>
                         {filterType === 'INCOME' && (categories?.INCOME || []).map(c => <option key={c} value={c}>{c}</option>)}
                         {filterType === 'EXPENSE' && (categories?.EXPENSE || []).map(c => <option key={c} value={c}>{c}</option>)}
@@ -93,7 +93,32 @@ export default function TransactionsView(props) {
                      )}
                   </div>
                   
-                  <div className="overflow-x-auto">
+                  <div className="md:hidden space-y-3">
+                     {logic.filteredTransactions.map(t => (
+                        <div key={t.id} className="rounded-2xl border border-gray-100 bg-[#F8F9FA] p-4">
+                           <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                 <p className="text-sm font-black text-[#1B2559] uppercase tracking-tight truncate">{t.note || t.category}</p>
+                                 <p className="text-[10px] font-bold text-gray-400 mt-1">{utils.formatDisplayDate(t.date)}</p>
+                                 <p className="text-[10px] font-black uppercase tracking-widest mt-2 truncate" style={{ color: logic.getCategoryColor(t.category) }}>{t.category}</p>
+                                 <p className="text-[10px] font-black text-[#1B2559] uppercase mt-1 flex items-center gap-1 min-w-0">
+                                    {t.linkedWallet ? <Link2 size={10} className="text-[#4318FF] shrink-0"/> : null}
+                                    <span className="truncate">{t.linkedWallet || t.wallet}</span>
+                                 </p>
+                              </div>
+                              <span className={`text-sm font-black tabular-nums shrink-0 ${t.type === 'INCOME' ? 'text-[#05CD99]' : 'text-[#EE5D50]'}`}>
+                                 {t.type === 'INCOME' ? '+' : '-'}{utils.formatVND(t.amount)}
+                              </span>
+                           </div>
+                           <div className="flex justify-end gap-2 mt-3">
+                              <button type="button" onClick={() => handleEditTransaction(t)} className="p-2 text-[#4318FF] bg-white rounded-xl shadow-sm"><Edit2 size={14}/></button>
+                              <button type="button" onClick={() => dbActions.deleteItem('transactions', t.id, t)} className="p-2 text-[#EE5D50] bg-white rounded-xl shadow-sm"><Trash2 size={14}/></button>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+
+                  <div className="hidden md:block overflow-x-auto">
                      <table className="w-full text-xs">
                         <thead className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] border-b border-gray-50 text-left">
                            <tr>
@@ -131,10 +156,10 @@ export default function TransactionsView(props) {
                            ))}
                         </tbody>
                      </table>
-                     {logic.filteredTransactions.length === 0 && (
-                        <div className="py-10 text-center text-xs font-black text-gray-400 uppercase tracking-widest opacity-50">Không tìm thấy giao dịch nào phù hợp</div>
-                     )}
                   </div>
+                  {logic.filteredTransactions.length === 0 && (
+                     <div className="py-10 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Không tìm thấy giao dịch nào phù hợp</div>
+                  )}
                </div>
             </div>
   );
