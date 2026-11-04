@@ -22,14 +22,14 @@ function getGoogleDisplayLabel(user) {
   return user.displayName || googleProvider?.email || user.email || 'Google';
 }
 
-export default function GoogleUpgradeButton({ auth, user, onToast, disabled }) {
+export default function GoogleUpgradeButton({ auth, user, authInitialized = true, onToast, disabled }) {
   const [processingAction, setProcessingAction] = useState(null);
 
   const isBusy = Boolean(processingAction);
-  const buttonsDisabled = disabled || isBusy || !user;
+  const buttonsDisabled = disabled || isBusy || !user || !authInitialized;
 
   const runAuthAction = async (legacyAction, fn) => {
-    if (!canStartGoogleAuthAction({ user, disabled, processingAction })) return;
+    if (!canStartGoogleAuthAction({ user, disabled, processingAction, authInitialized })) return;
     setProcessingAction(legacyAction);
     try {
       await fn();
@@ -55,7 +55,7 @@ export default function GoogleUpgradeButton({ auth, user, onToast, disabled }) {
     runAuthAction('link', () => linkAnonymousUserWithGoogle({ auth, currentUser: user }));
 
   const handleExistingSignIn = () => {
-    if (!canStartGoogleAuthAction({ user, disabled, processingAction })) return;
+    if (!canStartGoogleAuthAction({ user, disabled, processingAction, authInitialized })) return;
     if (!window.confirm(EXISTING_GOOGLE_SIGN_IN_CONFIRM)) return;
     runAuthAction('sign-in', () => signInWithExistingGoogleAccount({ auth }));
   };

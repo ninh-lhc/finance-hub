@@ -11,6 +11,10 @@ import {
 
 describe('canStartGoogleAuthAction', () => {
   it('blocks when user is missing', () => {
+    expect(
+      canStartGoogleAuthAction({ user: null, disabled: false, processingAction: null, authInitialized: false }),
+    ).toBe(false);
+
     expect(canStartGoogleAuthAction({ user: null, disabled: false, processingAction: null })).toBe(
       false,
     );

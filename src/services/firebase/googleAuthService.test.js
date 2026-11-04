@@ -13,6 +13,13 @@ vi.mock('firebase/auth', () => ({
   signInWithPopup,
 }));
 
+vi.mock('./authService.js', () => ({
+  waitForAuthInitialization: vi.fn(async (auth) => ({
+    auth,
+    user: auth?.currentUser ?? null,
+  })),
+}));
+
 import {
   linkAnonymousUserWithGoogle,
   signInWithExistingGoogleAccount,
@@ -31,7 +38,7 @@ describe('linkAnonymousUserWithGoogle', () => {
     linkWithPopup.mockResolvedValue({ user: { uid: 'anon-1' } });
     const result = await linkAnonymousUserWithGoogle({ auth, currentUser });
     expect(linkWithPopup).toHaveBeenCalledTimes(1);
-    expect(linkWithPopup.mock.calls[0][0]).toBe(currentUser);
+    expect(linkWithPopup.mock.calls[0][0]).toBe(auth.currentUser);
     expect(signInWithPopup).not.toHaveBeenCalled();
     expect(result.user.uid).toBe('anon-1');
   });
@@ -49,6 +56,7 @@ describe('linkAnonymousUserWithGoogle', () => {
   });
 
   it('throws when current user is missing', async () => {
+    auth.currentUser = null;
     await expect(linkAnonymousUserWithGoogle({ auth, currentUser: null })).rejects.toMatchObject({
       code: 'auth/no-current-user',
     });
@@ -71,7 +79,7 @@ describe('linkAnonymousUserWithGoogle', () => {
     await expect(linkAnonymousUserWithGoogle({ auth, currentUser })).rejects.toBe(firebaseError);
     expect(signInWithPopup).not.toHaveBeenCalled();
     expect(linkWithPopup).toHaveBeenCalledTimes(1);
-    expect(linkWithPopup.mock.calls[0][0]).toBe(currentUser);
+    expect(linkWithPopup.mock.calls[0][0]).toBe(auth.currentUser);
   });
 
   it('preserves UID on successful link', async () => {

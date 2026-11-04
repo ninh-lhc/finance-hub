@@ -41,6 +41,7 @@ export default function SettingsView(props) {
     legacyMigrationInspection,
     isInspectingLegacyMigration,
     onInspectLegacyMigration,
+    authInitialized,
   } = props;
 
   return (
@@ -66,7 +67,7 @@ export default function SettingsView(props) {
               onInspect={onInspectLegacyMigration}
             />
 
-            <GoogleUpgradeButton auth={auth} user={user} onToast={showToast} disabled={isProcessing} />
+            <GoogleUpgradeButton auth={auth} user={user} authInitialized={authInitialized} onToast={showToast} disabled={isProcessing} />
 
             <div className="p-6 bg-indigo-50/50 rounded-[24px] border border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>

@@ -156,6 +156,16 @@ export function getGoogleAuthErrorPresentation({ error, action }) {
     };
   }
 
+  if (code === 'auth/argument-error') {
+    return {
+      severity: 'error',
+      code,
+      silent: false,
+      message:
+        'Không mở được cửa sổ đăng nhập Google (cấu hình Auth chưa sẵn sàng). Tải lại trang (F5), đợi vài giây rồi thử lại; nếu vẫn lỗi, tắt chặn popup hoặc thử trình duyệt khác.',
+    };
+  }
+
   if (code === 'auth/uid-changed-after-link') {
     return {
       severity: 'error',

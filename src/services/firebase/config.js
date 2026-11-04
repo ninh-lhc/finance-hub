@@ -1,6 +1,6 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { createFirebaseAuth } from './authService.js';
 
 /**
  * Firebase Web client config (public). Defaults match project tai-chinh-cua-toi;
@@ -62,8 +62,8 @@ if (missingFirebaseFields.length > 0) {
   );
 }
 
-const firebaseApp = initializeApp(firebaseConfig);
-const auth = getAuth(firebaseApp);
+const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+const auth = createFirebaseAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
 const baseAppId = 'tai-chinh-cua-toi';
 

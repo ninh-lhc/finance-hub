@@ -16,10 +16,11 @@ export const EXISTING_GOOGLE_SIGN_IN_CONFIRM =
  *   user?: { uid?: string } | null;
  *   disabled?: boolean;
  *   processingAction?: string | null;
+ *   authInitialized?: boolean;
  * }} input
  */
-export function canStartGoogleAuthAction({ user, disabled, processingAction }) {
-  if (!user || disabled) {
+export function canStartGoogleAuthAction({ user, disabled, processingAction, authInitialized = true }) {
+  if (!authInitialized || !user || disabled) {
     return false;
   }
   if (processingAction) {

@@ -68,7 +68,7 @@ import {
 // MAIN APP COMPONENT
 // ==========================================
 export default function App() {
-  const user = useAuthUser();
+  const { user, authInitialized } = useAuthUser();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('TRANSACTION');
@@ -789,6 +789,7 @@ export default function App() {
               cancelEdit={cancelEdit}
               auth={auth}
               user={user}
+              authInitialized={authInitialized}
               showToast={showToast}
               isProcessing={isProcessing}
               syncCode={syncCode}
