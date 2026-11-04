@@ -6,6 +6,7 @@ import utils from '../../utils/format.js';
 import { THEME } from '../../constants/theme.js';
 import DonutChart from '../../components/common/DonutChart.jsx';
 import ProgressBar from '../../components/common/ProgressBar.jsx';
+import MonthComparisonPanel, { DeltaLabel } from './MonthComparisonPanel.jsx';
 
 function formatTopWalletLabel(name) {
   if (name === 'Chưa có ví' || !name) {
@@ -59,7 +60,26 @@ export default function DashboardView(props) {
     setActiveSettingTab,
     cancelEdit,
     generateDashboardAdvice,
+    monthComparison,
+    setFilterType,
+    setFilterCategory,
+    setFilterWallet,
+    setSearchQuery,
   } = props;
+
+  const openPreviousMonth = () => {
+    if (!monthComparison) return;
+    setSelectedMonth(monthComparison.previousMonth);
+    setSelectedYear(monthComparison.previousYear);
+  };
+
+  const openCategoryTransactions = (category) => {
+    setFilterType?.('EXPENSE');
+    setFilterCategory?.(category);
+    setFilterWallet?.('ALL');
+    setSearchQuery?.('');
+    setActiveTab('transactions');
+  };
 
   const openGoalSettings = () => {
     setActiveTab('settings');
@@ -140,6 +160,9 @@ export default function DashboardView(props) {
                               <span className="text-sm sm:text-xl lg:text-[22px] font-black text-[#05CD99] tracking-tighter truncate">{utils.formatVND(logic.income)}</span>
                               <ArrowUpRight size={16} className="text-[#05CD99] opacity-80 shrink-0 hidden sm:block"/>
                            </div>
+                           {monthComparison?.ready && (
+                              <p className="mt-1"><DeltaLabel delta={monthComparison.incomeDelta} prefix="vs" onClick={openPreviousMonth} /></p>
+                           )}
                         </div>
                         <div className="bg-[#1C244B] p-3 sm:p-5 rounded-2xl sm:rounded-[24px] border border-white/5 shadow-inner min-w-0">
                            <p className="text-[8px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-tight">Chi tiêu T{selectedMonth+1}</p>
@@ -147,6 +170,9 @@ export default function DashboardView(props) {
                               <span className="text-sm sm:text-xl lg:text-[22px] font-black text-[#EE5D50] tracking-tighter truncate">{utils.formatVND(logic.expense)}</span>
                               <ArrowDownLeft size={16} className="text-[#EE5D50] opacity-80 shrink-0 hidden sm:block"/>
                            </div>
+                           {monthComparison?.ready && (
+                              <p className="mt-1"><DeltaLabel delta={monthComparison.expenseDelta} invert prefix="vs" onClick={openPreviousMonth} /></p>
+                           )}
                         </div>
                         <div className="bg-[#1C244B] p-3 sm:p-5 rounded-2xl sm:rounded-[24px] border border-white/5 shadow-inner min-w-0">
                            <p className="text-[8px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-tight">Tích lũy</p>
@@ -154,6 +180,9 @@ export default function DashboardView(props) {
                               <span className="text-sm sm:text-xl lg:text-[22px] font-black text-[#FFCE20] tracking-tighter truncate">{utils.formatVND(logic.income - logic.expense)}</span>
                               <Landmark size={16} className="text-[#FFCE20] opacity-80 shrink-0 hidden sm:block"/>
                            </div>
+                           {monthComparison?.ready && (
+                              <p className="mt-1"><DeltaLabel delta={monthComparison.surplusDelta} prefix="vs" onClick={openPreviousMonth} /></p>
+                           )}
                         </div>
                      </div>
 
@@ -256,6 +285,14 @@ export default function DashboardView(props) {
                      )}
                   </div>
                </div>
+
+               <MonthComparisonPanel
+                 comparison={monthComparison}
+                 selectedMonth={selectedMonth}
+                 selectedYear={selectedYear}
+                 onSelectMonth={setSelectedMonth}
+                 onSelectCategory={openCategoryTransactions}
+               />
                
                {/* Section Phân tích Chi tiết */}
                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

@@ -1,7 +1,23 @@
+import { Fragment } from 'react';
 import {
   ArrowRightLeft, Search, FileDown, Upload, Download, Loader2, Filter, Link2, Edit2, Trash2
 } from 'lucide-react';
 import utils from '../../utils/format.js';
+import { DeltaLabel } from '../dashboard/MonthComparisonPanel.jsx';
+
+function groupTransactionsByDate(transactions) {
+  const groups = [];
+  transactions.forEach((transaction) => {
+    const date = transaction.date || '';
+    const last = groups[groups.length - 1];
+    if (!last || last.date !== date) {
+      groups.push({ date, items: [transaction] });
+    } else {
+      last.items.push(transaction);
+    }
+  });
+  return groups;
+}
 
 export default function TransactionsView(props) {
   const {
@@ -26,7 +42,22 @@ export default function TransactionsView(props) {
     handleExportCSV,
     handleEditTransaction,
     dbActions,
+    monthComparison,
   } = props;
+
+  const openPreviousMonth = () => {
+    if (!monthComparison) return;
+    setSelectedMonth(monthComparison.previousMonth);
+    setSelectedYear(monthComparison.previousYear);
+  };
+
+  const applyCategoryFilter = (transaction) => {
+    setFilterType(transaction.type === 'INCOME' ? 'INCOME' : transaction.type === 'EXPENSE' ? 'EXPENSE' : 'ALL');
+    setFilterCategory(transaction.category || 'ALL');
+    setFilterWallet('ALL');
+  };
+
+  const groupedTransactions = groupTransactionsByDate(logic.filteredTransactions);
 
   return (
             <div className="space-y-6 animate-in fade-in">
@@ -66,6 +97,32 @@ export default function TransactionsView(props) {
                      </div>
                   </div>
 
+                  {monthComparison?.ready && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                      <div className="bg-[#F4F7FE] rounded-2xl px-4 py-3 text-left">
+                        <button type="button" onClick={() => setFilterType('INCOME')} className="w-full text-left bg-transparent border-0 p-0">
+                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Thu tháng này</p>
+                          <p className="text-sm font-black text-[#05CD99] mt-1">{utils.formatVND(monthComparison.income)}</p>
+                        </button>
+                        <p className="mt-1"><DeltaLabel delta={monthComparison.incomeDelta} prefix={`so với T${monthComparison.previousMonth + 1}`} onClick={openPreviousMonth} /></p>
+                      </div>
+                      <div className="bg-[#F4F7FE] rounded-2xl px-4 py-3 text-left">
+                        <button type="button" onClick={() => setFilterType('EXPENSE')} className="w-full text-left bg-transparent border-0 p-0">
+                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Chi tháng này</p>
+                          <p className="text-sm font-black text-[#EE5D50] mt-1">{utils.formatVND(monthComparison.expense)}</p>
+                        </button>
+                        <p className="mt-1"><DeltaLabel delta={monthComparison.expenseDelta} invert prefix={`so với T${monthComparison.previousMonth + 1}`} onClick={openPreviousMonth} /></p>
+                      </div>
+                      <div className="bg-[#F4F7FE] rounded-2xl px-4 py-3 text-left">
+                        <button type="button" onClick={() => { setFilterType('ALL'); setFilterCategory('ALL'); setFilterWallet('ALL'); }} className="w-full text-left bg-transparent border-0 p-0">
+                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Tích lũy</p>
+                          <p className="text-sm font-black text-[#1B2559] mt-1">{utils.formatVND(monthComparison.surplus)}</p>
+                        </button>
+                        <p className="mt-1"><DeltaLabel delta={monthComparison.surplusDelta} prefix={`so với T${monthComparison.previousMonth + 1}`} onClick={openPreviousMonth} /></p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* BỘ LỌC THÔNG MINH */}
                   <div className="flex flex-wrap items-center gap-3 mb-8 bg-[#F8F9FA] p-3 rounded-2xl border border-gray-100">
                      <div className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">
@@ -93,14 +150,16 @@ export default function TransactionsView(props) {
                      )}
                   </div>
                   
-                  <div className="md:hidden space-y-3">
-                     {logic.filteredTransactions.map(t => (
+                  <div className="md:hidden space-y-4">
+                     {groupedTransactions.map((group) => (
+                      <div key={group.date || 'unknown'} className="space-y-3">
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">{group.date ? utils.formatDisplayDate(group.date) : 'Không ngày'}</p>
+                        {group.items.map(t => (
                         <div key={t.id} className="rounded-2xl border border-gray-100 bg-[#F8F9FA] p-4">
                            <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                  <p className="text-sm font-black text-[#1B2559] uppercase tracking-tight truncate">{t.note || t.category}</p>
-                                 <p className="text-[10px] font-bold text-gray-400 mt-1">{utils.formatDisplayDate(t.date)}</p>
-                                 <p className="text-[10px] font-black uppercase tracking-widest mt-2 truncate" style={{ color: logic.getCategoryColor(t.category) }}>{t.category}</p>
+                                 <button type="button" onClick={() => applyCategoryFilter(t)} className="text-[10px] font-black uppercase tracking-widest mt-2 truncate bg-transparent border-0 p-0" style={{ color: logic.getCategoryColor(t.category) }}>{t.category}</button>
                                  <p className="text-[10px] font-black text-[#1B2559] uppercase mt-1 flex items-center gap-1 min-w-0">
                                     {t.linkedWallet ? <Link2 size={10} className="text-[#4318FF] shrink-0"/> : null}
                                     <span className="truncate">{t.linkedWallet || t.wallet}</span>
@@ -115,6 +174,8 @@ export default function TransactionsView(props) {
                               <button type="button" onClick={() => dbActions.deleteItem('transactions', t.id, t)} className="p-2 text-[#EE5D50] bg-white rounded-xl shadow-sm"><Trash2 size={14}/></button>
                            </div>
                         </div>
+                        ))}
+                      </div>
                      ))}
                   </div>
 
@@ -131,28 +192,35 @@ export default function TransactionsView(props) {
                            </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                           {logic.filteredTransactions.map(t => (
-                              <tr key={t.id} className="hover:bg-gray-50/80 transition-all group">
-                                 <td className="py-5 pl-4 font-black text-gray-400 italic tabular-nums">{utils.formatDisplayDate(t.date)}</td>
-                                 <td className="py-5 font-black text-[#1B2559] uppercase tracking-tight text-sm">{t.note}</td>
-                                 <td className="py-5 text-center">
-                                    <span className="px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border border-gray-100 bg-white shadow-sm" style={{ color: logic.getCategoryColor(t.category) }}>
+                           {groupedTransactions.map((group) => (
+                            <Fragment key={group.date || 'unknown'}>
+                              <tr>
+                                 <td colSpan={6} className="pt-5 pb-1 pl-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">{group.date ? utils.formatDisplayDate(group.date) : 'Không ngày'}</td>
+                              </tr>
+                              {group.items.map(t => (
+                              <tr key={t.id} onClick={() => handleEditTransaction(t)} className="hover:bg-gray-50/80 transition-all cursor-pointer">
+                                 <td className="py-4 pl-4 font-black text-gray-400 italic tabular-nums">{utils.formatDisplayDate(t.date)}</td>
+                                 <td className="py-4 font-black text-[#1B2559] uppercase tracking-tight text-sm">{t.note}</td>
+                                 <td className="py-4 text-center">
+                                    <button type="button" onClick={(event) => { event.stopPropagation(); applyCategoryFilter(t); }} className="px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border border-gray-100 bg-white shadow-sm" style={{ color: logic.getCategoryColor(t.category) }}>
                                        {t.category}
-                                    </span>
+                                    </button>
                                  </td>
-                                 <td className="py-5 text-center font-black text-[#1B2559] uppercase text-[10px] tracking-tighter">
+                                 <td className="py-4 text-center font-black text-[#1B2559] uppercase text-[10px] tracking-tighter">
                                     {t.linkedWallet ? <span className="flex items-center justify-center gap-1"><Link2 size={10} className="text-[#4318FF]"/>{t.linkedWallet}</span> : t.wallet}
                                  </td>
-                                 <td className={`py-5 text-right pr-4 font-black text-base tabular-nums ${t.type === 'INCOME' ? 'text-[#05CD99]' : 'text-[#EE5D50]'}`}>
+                                 <td className={`py-4 text-right pr-4 font-black text-base tabular-nums ${t.type === 'INCOME' ? 'text-[#05CD99]' : 'text-[#EE5D50]'}`}>
                                     {t.type === 'INCOME' ? '+' : '-'}{utils.formatVND(t.amount)}
                                  </td>
-                                 <td className="py-5 text-center">
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                       <button onClick={() => handleEditTransaction(t)} className="p-2 text-[#4318FF] hover:bg-white rounded-xl shadow-sm"><Edit2 size={14}/></button>
-                                       <button onClick={() => dbActions.deleteItem('transactions', t.id, t)} className="p-2 text-[#EE5D50] hover:bg-white rounded-xl shadow-sm"><Trash2 size={14}/></button>
+                                 <td className="py-4 text-center" onClick={(event) => event.stopPropagation()}>
+                                    <div className="flex gap-1 justify-center">
+                                       <button type="button" onClick={() => handleEditTransaction(t)} className="p-2 text-[#4318FF] bg-[#F4F7FE] hover:bg-white rounded-xl"><Edit2 size={14}/></button>
+                                       <button type="button" onClick={() => dbActions.deleteItem('transactions', t.id, t)} className="p-2 text-[#EE5D50] bg-[#F4F7FE] hover:bg-white rounded-xl"><Trash2 size={14}/></button>
                                     </div>
                                  </td>
                               </tr>
+                              ))}
+                            </Fragment>
                            ))}
                         </tbody>
                      </table>

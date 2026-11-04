@@ -19,6 +19,7 @@ import TransactionModal from './features/transactions/TransactionModal.jsx';
 import utils from './utils/format.js';
 import { deriveFinanceLogic, deriveTransactionView } from './logic/deriveFinance.js';
 import { buildDataSourceDiagnostics } from './logic/dataSourceDiagnostics.js';
+import { buildMonthComparison, filterByYearMonth, previousPeriod } from './logic/monthComparison.js';
 import {
   parseFinanceCsv,
   serializeFinanceCsv,
@@ -115,11 +116,17 @@ export default function App() {
     selectedMonth,
     getCollectionRef,
   });
-  const { annualTransactions, isFetchingAnnual } = useAnnualTransactions({
+  const {
+    annualTransactions,
+    previousBoundaryTransactions,
+    isFetchingAnnual,
+    comparisonReady,
+  } = useAnnualTransactions({
     user,
     syncCode,
     activeTab,
     selectedYear,
+    selectedMonth,
     annualRefreshTick,
     getCollectionRef,
   });
@@ -257,6 +264,28 @@ export default function App() {
       }),
     [transactions, annualTransactions, walletBalances, selectedMonth, selectedYear, wallets, categories, annualSelectedMonth, goals, budgets],
   );
+
+  const monthComparison = useMemo(() => {
+    const previous = previousPeriod(selectedYear, selectedMonth);
+    const previousTransactions = selectedMonth === 0
+      ? previousBoundaryTransactions
+      : filterByYearMonth(annualTransactions, previous.year, previous.month);
+    return buildMonthComparison({
+      currentTransactions: transactions,
+      previousTransactions,
+      yearTransactions: annualTransactions,
+      selectedYear,
+      selectedMonth,
+      ready: comparisonReady,
+    });
+  }, [
+    transactions,
+    annualTransactions,
+    previousBoundaryTransactions,
+    selectedYear,
+    selectedMonth,
+    comparisonReady,
+  ]);
 
   const viewLogic = useMemo(
     () =>
@@ -734,6 +763,11 @@ export default function App() {
               setActiveSettingTab={setActiveSettingTab}
               cancelEdit={cancelEdit}
               generateDashboardAdvice={generateDashboardAdvice}
+              monthComparison={monthComparison}
+              setFilterType={setFilterType}
+              setFilterCategory={setFilterCategory}
+              setFilterWallet={setFilterWallet}
+              setSearchQuery={setSearchQuery}
             />
          )}
 
@@ -760,6 +794,7 @@ export default function App() {
               handleExportCSV={handleExportCSV}
               handleEditTransaction={handleEditTransaction}
               dbActions={dbActions}
+              monthComparison={monthComparison}
             />
          )}
 
