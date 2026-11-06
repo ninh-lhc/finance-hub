@@ -36,6 +36,12 @@ import {
   buildGoalPayload,
 } from './logic/planningEntities.js';
 import {
+  goalLink,
+  readGoalLink,
+  selectedGoalId,
+  validateGoalLinks,
+} from './logic/goalMovement.js';
+import {
   saveBudgetToFirestore,
   saveGoalToFirestore,
   deleteBudgetFromFirestore,
@@ -66,6 +72,16 @@ import {
   inspectLegacySyncMigration,
   LegacyMigrationNotReadyError,
 } from './services/finance/legacySyncMigrationService.js';
+
+function goalSaveError(result) {
+  if (result.reason === 'insufficient') {
+    return `${result.goalName} chỉ còn ${utils.formatVND(result.available)} để trừ.`;
+  }
+  if (result.reason === 'wrong-wallet') {
+    return `${result.goalName} không nằm trong ví đang chọn.`;
+  }
+  return 'Không tìm thấy mục tiêu vừa chọn.';
+}
 
 // ==========================================
 // MAIN APP COMPONENT
@@ -407,10 +423,37 @@ export default function App() {
 
     saveTransaction: async () => {
       if (!user) return;
+      let transferGoalOut = { goalId: '', goalDelta: 0 };
+      let transferGoalIn = { goalId: '', goalDelta: 0 };
       if (modalType === 'TRANSACTION') {
           if (!formData.amount || Number(formData.amount) <= 0) { showToast('Vui lòng nhập số tiền hợp lệ!', 'warning'); return; }
           if (formData.type !== 'TRANSFER' && !formData.category) { showToast('Vui lòng chọn danh mục!', 'warning'); return; }
           if (formData.type === 'TRANSFER' && (!formData.toWallet || formData.wallet === formData.toWallet)) { showToast('Ví nguồn và ví đích không được trùng nhau!', 'warning'); return; }
+          if (formData.type === 'EXPENSE') {
+              const chargedWallet = (useLinkedWallet && formData.linkedWallet) ? formData.linkedWallet : formData.wallet;
+              const link = goalLink(selectedGoalId(goals, chargedWallet, formData.goalId), formData.amount, 'decrease');
+              const previousLinks = editingTxId ? [readGoalLink(formData.originalTx)] : [];
+              const check = validateGoalLinks({
+                goals,
+                walletByGoalId: link.goalId ? { [link.goalId]: chargedWallet } : {},
+                previousLinks,
+                nextLinks: [link],
+              });
+              if (!check.ok) { showToast(goalSaveError(check), 'warning'); return; }
+          }
+          if (formData.type === 'TRANSFER' && !editingTxId) {
+              transferGoalOut = goalLink(selectedGoalId(goals, formData.wallet, formData.fromGoalId), formData.amount, 'decrease');
+              transferGoalIn = goalLink(selectedGoalId(goals, formData.toWallet, formData.toGoalId), formData.amount, 'increase');
+              const walletByGoalId = {};
+              if (transferGoalOut.goalId) walletByGoalId[transferGoalOut.goalId] = formData.wallet;
+              if (transferGoalIn.goalId) walletByGoalId[transferGoalIn.goalId] = formData.toWallet;
+              const check = validateGoalLinks({
+                goals,
+                walletByGoalId,
+                nextLinks: [transferGoalOut, transferGoalIn],
+              });
+              if (!check.ok) { showToast(goalSaveError(check), 'warning'); return; }
+          }
       }
 
       const colName = modalType === 'TRANSACTION' ? 'transactions' : modalType === 'GOAL' ? 'goals' : 'budgets';
@@ -423,7 +466,19 @@ export default function App() {
           if (!payload.date) payload.date = utils.getLocalYMD();
           if (!payload.wallet) payload.wallet = wallets[0];
           if (useLinkedWallet && formData.linkedWallet && formData.type === 'EXPENSE') payload.linkedWallet = formData.linkedWallet;
-          else payload.linkedWallet = ''; 
+          else payload.linkedWallet = '';
+          delete payload.fromGoalId;
+          delete payload.toGoalId;
+          if (payload.type !== 'TRANSFER') delete payload.toWallet;
+          if (payload.type === 'EXPENSE') {
+              const chargedWallet = payload.linkedWallet || payload.wallet;
+              const link = goalLink(selectedGoalId(goals, chargedWallet, formData.goalId), payload.amount, 'decrease');
+              payload.goalId = link.goalId;
+              payload.goalDelta = link.goalDelta;
+          } else if (payload.type !== 'TRANSFER') {
+              payload.goalId = '';
+              payload.goalDelta = 0;
+          }
           
           if (formData.type === 'TRANSFER' && !editingTxId) {
               await saveTransactionToFirestore({
@@ -434,6 +489,9 @@ export default function App() {
                 transferFromWallet: formData.wallet,
                 transferToWallet: formData.toWallet,
                 transferNote: formData.note,
+                transferGoalOut,
+                transferGoalIn,
+                goals,
               });
               handleCloseModal();
               showToast('Đã luân chuyển tiền thành công!', 'success');
@@ -448,6 +506,7 @@ export default function App() {
             editingTransactionId: editingTxId,
             originalTransaction: originalTx,
             isTransferCreate: false,
+            goals,
           });
       } else {
          if (editingTxId) await updateDoc(getDocRef(colName, editingTxId), payload);
@@ -481,7 +540,8 @@ export default function App() {
                getDocRef,
                collectionName: actualCol,
                documentId: id,
-               transaction: txObj,
+               transaction: { ...txObj, ...snapCheck.data() },
+               goals,
              });
              if (deleteResult.kind === 'transfer_pair') {
                  showToast('Đã xóa toàn bộ phiếu luân chuyển!', 'success');
@@ -654,7 +714,7 @@ export default function App() {
     setModalType('TRANSACTION');
     setEditingTxId(tx.id);
     if (tx.category.includes('Chuyển khoản')) { showToast('Hãy xóa và tạo lại đối với giao dịch luân chuyển tiền.', 'warning'); return; }
-    setFormData({ type: tx.type, amount: tx.amount, note: tx.note, wallet: tx.wallet, category: tx.category, date: tx.date, linkedWallet: tx.linkedWallet || '', originalTx: tx });
+    setFormData({ type: tx.type, amount: tx.amount, note: tx.note, wallet: tx.wallet, category: tx.category, date: tx.date, linkedWallet: tx.linkedWallet || '', goalId: tx.goalId || '', originalTx: tx });
     setUseLinkedWallet(!!tx.linkedWallet);
     setShowModal(true);
   };

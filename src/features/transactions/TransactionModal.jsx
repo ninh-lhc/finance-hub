@@ -1,6 +1,40 @@
 import { X } from 'lucide-react';
 import utils from '../../utils/format.js';
 import { locksForWallet } from '../../logic/planningEntities.js';
+import { goalAmountAfterUndo, goalsOnWallet, readGoalLink } from '../../logic/goalMovement.js';
+
+function GoalSelect({ label, emptyLabel, goals, value, onChange, hint, hintTone }) {
+  if (!goals.length) return null;
+  return (
+    <div className="space-y-1.5">
+      <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">{label}</label>
+      <select className="w-full p-4 bg-[#F4F7FE] rounded-2xl text-[10px] font-black outline-none cursor-pointer border-2 border-transparent focus:border-[#4318FF]/20" value={value || ''} onChange={onChange}>
+        <option value="">{emptyLabel}</option>
+        {goals.map((goal) => (
+          <option key={goal.id} value={goal.id}>{goal.name} ({utils.formatVND(goal.amount)})</option>
+        ))}
+      </select>
+      {hint && (
+        <p className={`text-[10px] font-bold leading-relaxed ${hintTone === 'block' ? 'text-[#EE5D50]' : 'text-[#FFA800]'}`}>{hint}</p>
+      )}
+    </div>
+  );
+}
+
+function goalActionHint(goals, goalId, amount, direction, previousLink) {
+  if (!goalId) return null;
+  const goal = (goals || []).find((item) => item.id === goalId);
+  const value = Number(amount || 0);
+  if (!goal || !value) return null;
+  if (direction === 'increase') {
+    return { tone: 'info', text: `Xác nhận sẽ cộng ${utils.formatVND(value)} vào ${goal.name}.` };
+  }
+  const room = goalAmountAfterUndo(goal, previousLink);
+  if (value > room) {
+    return { tone: 'block', text: `${goal.name} chỉ còn ${utils.formatVND(room)} để trừ.` };
+  }
+  return { tone: 'info', text: `Xác nhận sẽ trừ ${utils.formatVND(value)} khỏi ${goal.name}.` };
+}
 
 export default function TransactionModal(props) {
   const {
@@ -25,6 +59,28 @@ export default function TransactionModal(props) {
   const chargedLocks = chargedWallet ? locksForWallet(goals, chargedWallet) : [];
   const chargedLocked = chargedLocks.reduce((sum, lock) => sum + lock.amount, 0);
   const chargedBalance = Number(walletBalances?.[chargedWallet] || 0);
+  const expenseGoals = formData.type === 'EXPENSE' ? goalsOnWallet(goals, chargedWallet) : [];
+  const sourceGoals = formData.type === 'TRANSFER' ? goalsOnWallet(goals, formData.wallet) : [];
+  const destinationGoals = formData.type === 'TRANSFER' ? goalsOnWallet(goals, formData.toWallet) : [];
+  const expenseGoalId = expenseGoals.some((goal) => goal.id === formData.goalId) ? formData.goalId : '';
+  const fromGoalId = sourceGoals.some((goal) => goal.id === formData.fromGoalId) ? formData.fromGoalId : '';
+  const toGoalId = destinationGoals.some((goal) => goal.id === formData.toGoalId) ? formData.toGoalId : '';
+  const previousLink = readGoalLink(formData.originalTx);
+  const expenseHint = goalActionHint(expenseGoals, expenseGoalId, formData.amount, 'decrease', previousLink);
+  const sourceHint = goalActionHint(sourceGoals, fromGoalId, formData.amount, 'decrease', null);
+  const destinationHint = goalActionHint(destinationGoals, toGoalId, formData.amount, 'increase', null);
+  const goalBlocked = expenseHint?.tone === 'block' || sourceHint?.tone === 'block';
+
+  const switchType = (type, category) => {
+    setFormData({
+      ...formData,
+      type,
+      category,
+      goalId: '',
+      fromGoalId: '',
+      toGoalId: '',
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111C44]/60 backdrop-blur-md p-4 animate-in fade-in duration-300">
@@ -39,9 +95,9 @@ export default function TransactionModal(props) {
 
         {!editingTxId && (
           <div className="flex bg-[#F4F7FE] p-1.5 rounded-[16px] mb-6">
-            <button onClick={() => setFormData({...formData, type: 'INCOME', category: categories?.INCOME?.[0] || ''})} className={`flex-1 py-2.5 rounded-[12px] text-[9px] font-black uppercase tracking-widest transition-all ${formData.type === 'INCOME' ? 'bg-white shadow text-[#05CD99]' : 'text-gray-400'}`}>Thu</button>
-            <button onClick={() => setFormData({...formData, type: 'EXPENSE', category: categories?.EXPENSE?.[0] || ''})} className={`flex-1 py-2.5 rounded-[12px] text-[9px] font-black uppercase tracking-widest transition-all ${formData.type === 'EXPENSE' ? 'bg-white shadow text-[#EE5D50]' : 'text-gray-400'}`}>Chi</button>
-            <button onClick={() => setFormData({...formData, type: 'TRANSFER', category: ''})} className={`flex-1 py-2.5 rounded-[12px] text-[9px] font-black uppercase tracking-widest transition-all ${formData.type === 'TRANSFER' ? 'bg-white shadow text-[#4318FF]' : 'text-gray-400'}`}>Chuyển</button>
+            <button onClick={() => switchType('INCOME', categories?.INCOME?.[0] || '')} className={`flex-1 py-2.5 rounded-[12px] text-[9px] font-black uppercase tracking-widest transition-all ${formData.type === 'INCOME' ? 'bg-white shadow text-[#05CD99]' : 'text-gray-400'}`}>Thu</button>
+            <button onClick={() => switchType('EXPENSE', categories?.EXPENSE?.[0] || '')} className={`flex-1 py-2.5 rounded-[12px] text-[9px] font-black uppercase tracking-widest transition-all ${formData.type === 'EXPENSE' ? 'bg-white shadow text-[#EE5D50]' : 'text-gray-400'}`}>Chi</button>
+            <button onClick={() => switchType('TRANSFER', '')} className={`flex-1 py-2.5 rounded-[12px] text-[9px] font-black uppercase tracking-widest transition-all ${formData.type === 'TRANSFER' ? 'bg-white shadow text-[#4318FF]' : 'text-gray-400'}`}>Chuyển</button>
           </div>
         )}
 
@@ -61,14 +117,14 @@ export default function TransactionModal(props) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">{formData.type === 'TRANSFER' ? 'Từ ví' : 'Nguồn tiền'}</label>
-              <select className="w-full p-4 bg-[#F4F7FE] rounded-2xl text-[10px] font-black outline-none cursor-pointer border-2 border-transparent focus:border-[#4318FF]/20" value={formData.wallet || wallets[0]} onChange={e => setFormData({...formData, wallet: e.target.value})}>
+              <select className="w-full p-4 bg-[#F4F7FE] rounded-2xl text-[10px] font-black outline-none cursor-pointer border-2 border-transparent focus:border-[#4318FF]/20" value={formData.wallet || wallets[0]} onChange={e => setFormData({...formData, wallet: e.target.value, fromGoalId: '', goalId: (formData.type === 'EXPENSE' && useLinkedWallet && formData.linkedWallet) ? formData.goalId : ''})}>
                 {(wallets || []).map(w => <option key={w} value={w}>{w}</option>)}
               </select>
             </div>
             {formData.type === 'TRANSFER' ? (
               <div className="space-y-1.5">
                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">Đến ví</label>
-                <select className="w-full p-4 bg-[#F4F7FE] rounded-2xl text-[10px] font-black outline-none cursor-pointer border-2 border-transparent focus:border-[#4318FF]/20" value={formData.toWallet || ''} onChange={e => setFormData({...formData, toWallet: e.target.value})}>
+                <select className="w-full p-4 bg-[#F4F7FE] rounded-2xl text-[10px] font-black outline-none cursor-pointer border-2 border-transparent focus:border-[#4318FF]/20" value={formData.toWallet || ''} onChange={e => setFormData({...formData, toWallet: e.target.value, toGoalId: ''})}>
                   <option value="">Chọn...</option>
                   {(wallets || []).filter(w => w !== formData.wallet).map(w => <option key={w} value={w}>{w}</option>)}
                 </select>
@@ -92,13 +148,13 @@ export default function TransactionModal(props) {
           {formData.type === 'EXPENSE' && (
             <div className="space-y-2 bg-[#F4F7FE] p-3 rounded-2xl border border-gray-100">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="w-4 h-4 rounded text-[#4318FF] focus:ring-0" checked={useLinkedWallet} onChange={(e) => setUseLinkedWallet(e.target.checked)} />
+                <input type="checkbox" className="w-4 h-4 rounded text-[#4318FF] focus:ring-0" checked={useLinkedWallet} onChange={(e) => { setUseLinkedWallet(e.target.checked); setFormData({ ...formData, goalId: '' }); }} />
                 <span className="text-[10px] font-bold text-[#1B2559] uppercase">Trừ tiền thực tế từ nguồn khác?</span>
               </label>
               {useLinkedWallet && (
                 <div className="pl-6 pt-1 animate-in slide-in-from-top-1">
                   <p className="text-[9px] text-gray-400 mb-1 italic">Chọn ví để trừ tiền thực tế:</p>
-                  <select className="w-full p-3 bg-white rounded-xl text-[10px] font-black outline-none border-2 border-transparent focus:border-[#4318FF]/20" value={formData.linkedWallet || ''} onChange={e => setFormData({...formData, linkedWallet: e.target.value})}>
+                  <select className="w-full p-3 bg-white rounded-xl text-[10px] font-black outline-none border-2 border-transparent focus:border-[#4318FF]/20" value={formData.linkedWallet || ''} onChange={e => setFormData({...formData, linkedWallet: e.target.value, goalId: ''})}>
                     <option value="">Chọn...</option>
                     {(wallets || []).filter(w => w !== formData.wallet).map(w => <option key={w} value={w}>{w}</option>)}
                   </select>
@@ -107,12 +163,40 @@ export default function TransactionModal(props) {
             </div>
           )}
 
+          <GoalSelect
+            label="Trừ từ mục tiêu"
+            emptyLabel="Không trừ mục tiêu"
+            goals={expenseGoals}
+            value={expenseGoalId}
+            onChange={(e) => setFormData({ ...formData, goalId: e.target.value })}
+            hint={expenseHint?.text}
+            hintTone={expenseHint?.tone}
+          />
+          <GoalSelect
+            label="Trừ từ mục tiêu"
+            emptyLabel="Không trừ mục tiêu"
+            goals={sourceGoals}
+            value={fromGoalId}
+            onChange={(e) => setFormData({ ...formData, fromGoalId: e.target.value })}
+            hint={sourceHint?.text}
+            hintTone={sourceHint?.tone}
+          />
+          <GoalSelect
+            label="Cộng vào mục tiêu"
+            emptyLabel="Không cộng vào mục tiêu"
+            goals={destinationGoals}
+            value={toGoalId}
+            onChange={(e) => setFormData({ ...formData, toGoalId: e.target.value })}
+            hint={destinationHint?.text}
+            hintTone={destinationHint?.tone}
+          />
+
           <div className="space-y-1.5">
             <label className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">Thời gian</label>
             <input type="date" className="w-full p-4 bg-[#F4F7FE] rounded-2xl text-[10px] font-black outline-none border-2 border-transparent focus:border-[#4318FF]/20" value={formData.date || utils.getLocalYMD()} onChange={e => setFormData({...formData, date: e.target.value})} />
           </div>
 
-          <button onClick={onSaveTransaction} className={`w-full py-5 rounded-2xl font-black text-[10px] text-white shadow-xl uppercase tracking-[0.3em] active:scale-95 transition-all mt-4 ${editingTxId ? 'bg-[#05CD99]' : formData.type === 'INCOME' ? 'bg-[#05CD99]' : formData.type === 'EXPENSE' ? 'bg-[#EE5D50]' : 'bg-[#4318FF]'}`}>
+          <button onClick={onSaveTransaction} disabled={goalBlocked} className={`w-full py-5 rounded-2xl font-black text-[10px] text-white shadow-xl uppercase tracking-[0.3em] active:scale-95 transition-all mt-4 disabled:opacity-40 disabled:cursor-not-allowed ${editingTxId ? 'bg-[#05CD99]' : formData.type === 'INCOME' ? 'bg-[#05CD99]' : formData.type === 'EXPENSE' ? 'bg-[#EE5D50]' : 'bg-[#4318FF]'}`}>
             {editingTxId ? 'Lưu thay đổi' : 'Xác nhận giao dịch'}
           </button>
         </div>

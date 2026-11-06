@@ -7,6 +7,7 @@ import {
   getTransactionUpdateBalanceImpact,
   getTransferBalanceImpact,
 } from '../../logic/transactionBalance.js';
+import { netGoalDeltas, readGoalLink } from '../../logic/goalMovement.js';
 
 function applyWalletBalanceIncrements(batch, settingsRef, impacts) {
   const wbUpdates = {};
@@ -15,6 +16,21 @@ function applyWalletBalanceIncrements(batch, settingsRef, impacts) {
   }
   if (Object.keys(wbUpdates).length > 0) {
     batch.set(settingsRef, { walletBalances: wbUpdates }, { merge: true });
+  }
+}
+
+function withoutGoalFormFields(payload) {
+  const stored = { ...payload };
+  delete stored.fromGoalId;
+  delete stored.toGoalId;
+  return stored;
+}
+
+function applyGoalDeltas(batch, getDocRef, previousLinks, nextLinks, goals) {
+  const known = new Set((goals || []).map((goal) => goal.id));
+  for (const { goalId, delta } of netGoalDeltas(previousLinks, nextLinks)) {
+    if (!known.has(goalId)) continue;
+    batch.update(getDocRef('goals', goalId), { amount: increment(delta) });
   }
 }
 
@@ -28,6 +44,9 @@ export async function saveTransactionToFirestore({
   transferFromWallet,
   transferToWallet,
   transferNote,
+  transferGoalOut,
+  transferGoalIn,
+  goals,
 }) {
   const [y, m] = payload.date.split('-');
   const actualCol = `transactions_${y}_${m}`;
@@ -36,26 +55,33 @@ export async function saveTransactionToFirestore({
 
   if (isTransferCreate) {
     const transferId = Date.now().toString();
+    const outLink = transferGoalOut || { goalId: '', goalDelta: 0 };
+    const inLink = transferGoalIn || { goalId: '', goalDelta: 0 };
+    const stored = withoutGoalFormFields(payload);
 
     const txOutRef = doc(getCollectionRef(actualCol));
     batch.set(txOutRef, {
-      ...payload,
+      ...stored,
       type: 'EXPENSE',
       category: 'Chuyển khoản đi',
       note: `Chuyển tới ${transferToWallet}: ${transferNote || ''}`,
       createdAt: new Date().toISOString(),
       transferId,
+      goalId: outLink.goalId,
+      goalDelta: outLink.goalDelta,
     });
 
     const txInRef = doc(getCollectionRef(actualCol));
     batch.set(txInRef, {
-      ...payload,
+      ...stored,
       type: 'INCOME',
       wallet: transferToWallet,
       category: 'Chuyển khoản đến',
       note: `Nhận từ ${transferFromWallet}: ${transferNote || ''}`,
       createdAt: new Date().toISOString(),
       transferId,
+      goalId: inLink.goalId,
+      goalDelta: inLink.goalDelta,
     });
 
     const impacts = getTransferBalanceImpact({
@@ -64,6 +90,7 @@ export async function saveTransactionToFirestore({
       amount: payload.amount,
     });
     applyWalletBalanceIncrements(batch, settingsRef, impacts);
+    applyGoalDeltas(batch, getDocRef, [], [outLink, inLink], goals);
     await batch.commit();
     return;
   }
@@ -91,6 +118,13 @@ export async function saveTransactionToFirestore({
   }
 
   applyWalletBalanceIncrements(batch, settingsRef, impacts);
+  applyGoalDeltas(
+    batch,
+    getDocRef,
+    editingTransactionId ? [readGoalLink(originalTransaction)] : [],
+    [readGoalLink(payload)],
+    goals,
+  );
   await batch.commit();
 }
 
@@ -100,6 +134,7 @@ export async function deleteTransactionFromFirestore({
   collectionName,
   documentId,
   transaction,
+  goals,
 }) {
   const batch = writeBatch(db);
   const settingsRef = getDocRef('settings', 'general');
@@ -114,12 +149,14 @@ export async function deleteTransactionFromFirestore({
     });
 
     applyWalletBalanceIncrements(batch, settingsRef, impacts);
+    applyGoalDeltas(batch, getDocRef, snap.docs.map((docSnap) => readGoalLink(docSnap.data())), [], goals);
     await batch.commit();
     return { kind: 'transfer_pair' };
   }
 
   const impacts = getTransactionDeleteBalanceImpact(transaction);
   applyWalletBalanceIncrements(batch, settingsRef, impacts);
+  applyGoalDeltas(batch, getDocRef, [readGoalLink(transaction)], [], goals);
   batch.delete(getDocRef(collectionName, documentId));
   await batch.commit();
   return { kind: 'single' };
