@@ -1,5 +1,6 @@
 import utils from '../utils/format.js';
 import { THEME, CHART_COLORS } from '../constants/theme.js';
+import { locksForWallet } from './planningEntities.js';
 
 export const deriveFinanceLogic = ({
   transactions,
@@ -54,8 +55,10 @@ export const deriveFinanceLogic = ({
   const expenseChart = Object.entries(expenseCats).sort((a,b) => b[1] - a[1]).map(([name, value]) => ({ name, value, color: getCategoryColor(name) }));
 
   const fullWalletList = (wallets || []).map((w) => {
-      const bal = walletBalances[w] || 0;
-      return { name: w, value: bal, color: getWalletColor(w) };
+      const bal = Number(walletBalances[w] || 0);
+      const locks = locksForWallet(goals, w);
+      const locked = locks.reduce((sum, lock) => sum + lock.amount, 0);
+      return { name: w, value: bal, locked, spendable: bal - locked, locks, color: getWalletColor(w) };
   });
   const walletChart = fullWalletList.filter(d => d.value > 0);
 

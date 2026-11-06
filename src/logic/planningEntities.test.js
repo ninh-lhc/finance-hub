@@ -15,9 +15,10 @@ describe('isBudgetFormReady', () => {
 });
 
 describe('isGoalFormReady', () => {
-  it('requires goal name', () => {
-    expect(isGoalFormReady({ goalName: 'Mua nhà' })).toBe(true);
-    expect(isGoalFormReady({ goalName: '' })).toBe(false);
+  it('requires goal name and the wallet holding the money', () => {
+    expect(isGoalFormReady({ goalName: 'Mua nhà', goalWallet: 'ViettelPay' })).toBe(true);
+    expect(isGoalFormReady({ goalName: 'Mua nhà' })).toBe(false);
+    expect(isGoalFormReady({ goalName: '', goalWallet: 'ViettelPay' })).toBe(false);
   });
 });
 
@@ -68,6 +69,7 @@ describe('buildGoalPayload', () => {
       name: 'Du lịch',
       target: 10000000,
       amount: 2000000,
+      wallet: '',
       isSample: false,
     });
   });
@@ -113,7 +115,7 @@ describe('buildGoalPayload', () => {
   it('create and edit use same payload fields', () => {
     const form = { goalName: 'G', goalAmount: '500', goalCurrentAmount: '100' };
     expect(Object.keys(buildGoalPayload({ form })).sort()).toEqual(
-      ['amount', 'isSample', 'name', 'target'].sort(),
+      ['amount', 'isSample', 'name', 'target', 'wallet'].sort(),
     );
   });
 });

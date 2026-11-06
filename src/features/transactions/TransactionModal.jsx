@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import utils from '../../utils/format.js';
+import { locksForWallet } from '../../logic/planningEntities.js';
 
 export default function TransactionModal(props) {
   const {
@@ -12,7 +13,18 @@ export default function TransactionModal(props) {
     setUseLinkedWallet,
     handleCloseModal,
     onSaveTransaction,
+    goals,
+    walletBalances,
   } = props;
+
+  const chargedWallet = formData.type === 'INCOME'
+    ? null
+    : (formData.type === 'EXPENSE' && useLinkedWallet && formData.linkedWallet)
+      ? formData.linkedWallet
+      : formData.wallet;
+  const chargedLocks = chargedWallet ? locksForWallet(goals, chargedWallet) : [];
+  const chargedLocked = chargedLocks.reduce((sum, lock) => sum + lock.amount, 0);
+  const chargedBalance = Number(walletBalances?.[chargedWallet] || 0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111C44]/60 backdrop-blur-md p-4 animate-in fade-in duration-300">
@@ -70,6 +82,12 @@ export default function TransactionModal(props) {
               </div>
             )}
           </div>
+
+          {chargedLocked > 0 && (
+            <p className="text-[10px] font-bold text-[#FFA800] leading-relaxed">
+              {chargedWallet} đang khóa {chargedLocks.map((lock) => `${lock.name} ${utils.formatVND(lock.amount)}`).join(', ')}. Còn chi được {utils.formatVND(chargedBalance - chargedLocked)}.
+            </p>
+          )}
 
           {formData.type === 'EXPENSE' && (
             <div className="space-y-2 bg-[#F4F7FE] p-3 rounded-2xl border border-gray-100">

@@ -90,6 +90,22 @@ describe('deriveFinanceLogic', () => {
       expect(result.totalGoalsAmount).toBe(5_000);
       expect(result.spendableBal).toBe(5_000);
     });
+
+    it('shows locked goal money on the wallet that holds it', () => {
+      const result = deriveFinanceLogic(createBaseInput({
+        wallets: ['Agribank', 'ViettelPay'],
+        walletBalances: { Agribank: 20_000_000, ViettelPay: 12_000_000 },
+        goals: [
+          { id: 'g1', name: 'Tiết kiệm', target: 50_000_000, amount: 8_000_000, wallet: 'ViettelPay' },
+          { id: 'g2', name: 'Quỹ khẩn cấp', target: 4_000_000, amount: 4_000_000, wallet: 'ViettelPay' },
+        ],
+      }));
+      const viettel = result.fullWalletList.find((wallet) => wallet.name === 'ViettelPay');
+      expect(viettel.locked).toBe(12_000_000);
+      expect(viettel.spendable).toBe(0);
+      expect(viettel.locks.map((lock) => lock.name)).toEqual(['Tiết kiệm', 'Quỹ khẩn cấp']);
+      expect(result.fullWalletList.find((wallet) => wallet.name === 'Agribank').locked).toBe(0);
+    });
   });
 
   describe('charts and grouping', () => {
@@ -118,6 +134,7 @@ describe('deriveFinanceLogic', () => {
 
       expect(result.fullWalletList).toHaveLength(2);
       expect(result.fullWalletList.find((w) => w.name === 'Tiền mặt').value).toBe(800);
+      expect(result.fullWalletList.find((w) => w.name === 'Tiền mặt').locked).toBe(0);
       expect(result.walletChart).toHaveLength(1);
       expect(result.walletChart[0].name).toBe('Tiền mặt');
     });

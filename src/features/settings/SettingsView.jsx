@@ -159,7 +159,7 @@ export default function SettingsView(props) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(wallets || []).map((w, i) => (
                 <div key={i} className="p-6 bg-[#F8F9FA] rounded-[24px] flex justify-between items-center border border-transparent hover:border-indigo-100">
-                  <div className="flex items-center gap-4"><div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm text-[#1B2559]"><Landmark size={20}/></div><div><h4 className="text-xs font-black text-[#1B2559] uppercase">{w}</h4><p className="text-[10px] font-bold text-gray-400">{utils.formatVND(walletBalances[w] || 0)}</p></div></div>
+                  <div className="flex items-center gap-4 min-w-0"><div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm text-[#1B2559] shrink-0"><Landmark size={20}/></div><div className="min-w-0"><h4 className="text-xs font-black text-[#1B2559] uppercase">{w}</h4><p className="text-[10px] font-bold text-gray-400">{utils.formatVND(walletBalances[w] || 0)}</p>{(goals || []).filter((goal) => goal.wallet === w).length > 0 && <p className="text-[9px] font-bold text-[#FFA800] mt-1">Khóa {(goals || []).filter((goal) => goal.wallet === w).map((goal) => `${goal.name} ${utils.formatVND(goal.amount)}`).join(' · ')}</p>}</div></div>
                   <div className="flex gap-2">
                     <button onClick={() => resetWalletBalance(w)} title="Reset về 0đ" className="text-gray-400 hover:text-[#05CD99] p-2 rounded-xl transition-all"><RotateCcw size={16}/></button>
                     <button onClick={() => { setEditingId(i); setSettingsForm({...settingsForm, walletName: w}); }} className="text-gray-400 hover:text-[#4318FF] p-2 rounded-xl transition-all"><Edit2 size={16}/></button>
@@ -207,6 +207,10 @@ export default function SettingsView(props) {
               <input type="text" placeholder="Tên mục tiêu..." className="p-4 bg-white rounded-2xl font-black text-[#1B2559] outline-none text-xs" value={settingsForm.goalName} onChange={(e) => setSettingsForm({...settingsForm, goalName: e.target.value})} />
               <input type="text" inputMode="numeric" placeholder="Đã tích lũy..." className="p-4 bg-white rounded-2xl font-black text-[#1B2559] outline-none text-xs" value={utils.formatInputNumber(settingsForm.goalCurrentAmount)} onChange={(e) => setSettingsForm({...settingsForm, goalCurrentAmount: utils.parseInputNumber(e.target.value)})} />
               <input type="text" inputMode="numeric" placeholder="Số tiền đích..." className="p-4 bg-white rounded-2xl font-black text-[#1B2559] outline-none text-xs" value={utils.formatInputNumber(settingsForm.goalAmount)} onChange={(e) => setSettingsForm({...settingsForm, goalAmount: utils.parseInputNumber(e.target.value)})} />
+              <select className="p-4 bg-white rounded-2xl font-black text-[#1B2559] outline-none text-xs md:col-span-3" value={settingsForm.goalWallet || ''} onChange={(e) => setSettingsForm({...settingsForm, goalWallet: e.target.value})}>
+                <option value="">Chọn ví đang giữ số tiền này</option>
+                {(wallets || []).map((wallet) => <option key={wallet} value={wallet}>{wallet}</option>)}
+              </select>
               <button onClick={handleSaveGoal} className="col-span-1 md:col-span-3 py-4 bg-[#FFA800] text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-orange-100">Xác nhận kế hoạch</button>
             </div>
             <div className="space-y-4">
@@ -214,13 +218,14 @@ export default function SettingsView(props) {
                 <div key={g.id} className="p-8 bg-[#F8F9FA] rounded-[32px] flex justify-between items-center hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-gray-100">
                   <div className="space-y-1">
                     <h4 className="text-xl font-black text-[#1B2559] italic tracking-tighter uppercase">{g.name}</h4>
-                    <div className="flex gap-4 text-[10px] font-bold tracking-widest mt-1">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-bold tracking-widest mt-1">
                       <span className="text-[#05CD99]">CÓ: {utils.formatVND(g.amount)}</span>
                       <span className="text-gray-400">ĐÍCH: {utils.formatVND(g.target)}</span>
+                      <span className="text-[#4318FF]">{g.wallet ? `VÍ: ${g.wallet}` : 'CHƯA GẮN VÍ'}</span>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => { setEditingId(g.id); setSettingsForm({...settingsForm, goalName: g.name, goalAmount: g.target, goalCurrentAmount: g.amount}); }} className="p-3 bg-white rounded-2xl text-gray-400 hover:text-[#4318FF] shadow-sm"><Edit2 size={18}/></button>
+                    <button onClick={() => { setEditingId(g.id); setSettingsForm({...settingsForm, goalName: g.name, goalAmount: g.target, goalCurrentAmount: g.amount, goalWallet: g.wallet || ''}); }} className="p-3 bg-white rounded-2xl text-gray-400 hover:text-[#4318FF] shadow-sm"><Edit2 size={18}/></button>
                     <button onClick={() => dbActions.deleteItem('goals', g.id)} className="p-3 bg-white rounded-2xl text-gray-400 hover:text-[#EE5D50] shadow-sm"><Trash2 size={18}/></button>
                   </div>
                 </div>

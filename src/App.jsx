@@ -85,7 +85,7 @@ export default function App() {
 
   const [formData, setFormData] = useState({});
   const [editingTxId, setEditingTxId] = useState(null);
-  const [settingsForm, setSettingsForm] = useState({ budgetAmount: '', budgetCategory: '', walletName: '', categoryName: '', categoryType: 'INCOME', goalName: '', goalAmount: '', goalCurrentAmount: '' });
+  const [settingsForm, setSettingsForm] = useState({ budgetAmount: '', budgetCategory: '', walletName: '', categoryName: '', categoryType: 'INCOME', goalName: '', goalAmount: '', goalCurrentAmount: '', goalWallet: '' });
   const [editingId, setEditingId] = useState(null);
   const [useLinkedWallet, setUseLinkedWallet] = useState(false);
   
@@ -559,7 +559,7 @@ export default function App() {
   };
 
   // Các hàm quản lý Cài đặt
-  const cancelEdit = () => { setEditingId(null); setSettingsForm({ budgetAmount: '', budgetCategory: '', walletName: '', categoryName: '', categoryType: 'INCOME', goalName: '', goalAmount: '', goalCurrentAmount: '' }); };
+  const cancelEdit = () => { setEditingId(null); setSettingsForm({ budgetAmount: '', budgetCategory: '', walletName: '', categoryName: '', categoryType: 'INCOME', goalName: '', goalAmount: '', goalCurrentAmount: '', goalWallet: '' }); };
 
   const handleExportCSV = () => {
     const isAnnualExport = activeTab === 'annual';
@@ -929,6 +929,8 @@ export default function App() {
               setUseLinkedWallet={setUseLinkedWallet}
               handleCloseModal={handleCloseModal}
               onSaveTransaction={dbActions.saveTransaction}
+              goals={goals}
+              walletBalances={walletBalances}
             />
       )}
     </div>

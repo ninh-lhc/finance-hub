@@ -260,6 +260,9 @@ export default function DashboardView(props) {
                                        <PiggyBank size={14} /> Quỹ ưu tiên
                                     </p>
                                     <h4 className="text-lg font-black text-[#1B2559] truncate pr-4">{logic.priorityGoal.name}</h4>
+                                    {logic.priorityGoal.wallet && (
+                                      <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase">Trong ví {logic.priorityGoal.wallet}</p>
+                                    )}
                                  </div>
                                  <div className="w-10 h-10 rounded-2xl bg-[#E6FDF9] flex items-center justify-center flex-shrink-0 border border-[#05CD99]/20">
                                     <Target size={20} className="text-[#05CD99]"/>
@@ -382,6 +385,12 @@ export default function DashboardView(props) {
                                        </div>
                                        <span className="font-black text-[#1B2559]">{showBalance ? utils.formatVND(w.value) : "••••"}</span>
                                     </div>
+                                    {w.locked > 0 && (
+                                      <p className="text-[9px] font-bold text-[#FFA800] leading-relaxed">
+                                        Khóa {w.locks.map((lock) => `${lock.name} ${showBalance ? utils.formatVND(lock.amount) : '••••'}`).join(' · ')}
+                                        {' · '}còn chi {showBalance ? utils.formatVND(w.spendable) : '••••'}
+                                      </p>
+                                    )}
                                     <div className="w-full bg-[#F4F7FE] rounded-full h-2 overflow-hidden">
                                        <div className="h-full rounded-full transition-all" style={{width: `${logic.globalBal > 0 ? (Math.max(0, w.value) / logic.globalBal) * 100 : 0}%`, backgroundColor: w.color}}></div>
                                     </div>
