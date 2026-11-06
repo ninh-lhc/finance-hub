@@ -4,6 +4,8 @@ import {
   isCategoryFormReady,
   normalizeWalletName,
   buildNextWalletsList,
+  removeWalletAtIndex,
+  canDeleteWallet,
   getWalletBalanceTransferAmount,
   buildWalletReferencePatch,
   buildNextCategoryList,
@@ -79,6 +81,19 @@ describe('isCategoryFormReady', () => {
 describe('normalizeWalletName', () => {
   it('trims whitespace', () => {
     expect(normalizeWalletName('  Techcombank  ')).toBe('Techcombank');
+  });
+});
+
+describe('removeWalletAtIndex', () => {
+  it('removes the wallet at the chosen index', () => {
+    expect(removeWalletAtIndex({ wallets: ['Tiền mặt', 'Momo'], index: 1 })).toEqual(['Tiền mặt']);
+  });
+});
+
+describe('canDeleteWallet', () => {
+  it('keeps the last wallet', () => {
+    expect(canDeleteWallet({ wallets: ['Tiền mặt'] })).toBe(false);
+    expect(canDeleteWallet({ wallets: ['Tiền mặt', 'Agribank'] })).toBe(true);
   });
 });
 

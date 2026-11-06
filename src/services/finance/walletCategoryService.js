@@ -1,10 +1,11 @@
-import { getDocs, setDoc, writeBatch, increment } from 'firebase/firestore';
+import { getDocs, setDoc, writeBatch, increment, deleteField } from 'firebase/firestore';
 import { db } from '../firebase/config.js';
 import {
   normalizeWalletName,
   normalizeCategoryName,
   getCategoryTypeFromForm,
   buildNextWalletsList,
+  removeWalletAtIndex,
   getWalletNameAtIndex,
   shouldRenameWallet,
   getWalletBalanceTransferAmount,
@@ -79,6 +80,23 @@ export async function saveWalletToFirestore({
     { merge: true },
   );
   return { outcome: 'saved' };
+}
+
+export async function deleteWalletFromFirestore({
+  getDocRef,
+  wallets,
+  index,
+  walletName,
+}) {
+  const nextWallets = removeWalletAtIndex({ wallets, index });
+  await setDoc(
+    getDocRef('settings', 'general'),
+    {
+      wallets: nextWallets,
+      walletBalances: { [walletName]: deleteField() },
+    },
+    { merge: true },
+  );
 }
 
 export async function saveCategoryToFirestore({

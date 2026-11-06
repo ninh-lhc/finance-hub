@@ -37,6 +37,16 @@ export function getWalletNameAtIndex({ wallets, editingId }) {
   return wallets?.[editingId] ?? null;
 }
 
+export function removeWalletAtIndex({ wallets, index }) {
+  const list = wallets || [];
+  if (index < 0 || index >= list.length) return [...list];
+  return list.filter((_, itemIndex) => itemIndex !== index);
+}
+
+export function canDeleteWallet({ wallets }) {
+  return (wallets || []).length > 1;
+}
+
 export function shouldRenameWallet({ oldName, cleanName }) {
   return oldName !== cleanName;
 }

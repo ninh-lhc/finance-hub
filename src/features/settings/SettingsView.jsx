@@ -33,6 +33,7 @@ export default function SettingsView(props) {
     logic,
     handleSaveBudget,
     handleSaveWallet,
+    handleDeleteWallet,
     handleSaveCategory,
     handleDeleteCategory,
     handleSaveGoal,
@@ -162,6 +163,7 @@ export default function SettingsView(props) {
                   <div className="flex gap-2">
                     <button onClick={() => resetWalletBalance(w)} title="Reset về 0đ" className="text-gray-400 hover:text-[#05CD99] p-2 rounded-xl transition-all"><RotateCcw size={16}/></button>
                     <button onClick={() => { setEditingId(i); setSettingsForm({...settingsForm, walletName: w}); }} className="text-gray-400 hover:text-[#4318FF] p-2 rounded-xl transition-all"><Edit2 size={16}/></button>
+                    <button type="button" aria-label={`Xóa ${w}`} onClick={() => handleDeleteWallet(i)} className="text-gray-400 hover:text-[#EE5D50] p-2 rounded-xl transition-all"><Trash2 size={16}/></button>
                   </div>
                 </div>
               ))}

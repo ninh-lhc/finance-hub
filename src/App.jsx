@@ -41,11 +41,12 @@ import {
   deleteBudgetFromFirestore,
   deleteGoalFromFirestore,
 } from './services/finance/planningService.js';
-import { isWalletFormReady, isCategoryFormReady, hasCategoryNameConflict, normalizeCategoryName, canDeleteCategory } from './logic/walletCategoryEntities.js';
+import { isWalletFormReady, isCategoryFormReady, hasCategoryNameConflict, normalizeCategoryName, canDeleteCategory, canDeleteWallet } from './logic/walletCategoryEntities.js';
 import {
   saveWalletToFirestore,
   saveCategoryToFirestore,
   deleteCategoryFromFirestore,
+  deleteWalletFromFirestore,
 } from './services/finance/walletCategoryService.js';
 import {
   recalculateWalletBalancesInFirestore,
@@ -682,6 +683,30 @@ export default function App() {
      );
   };
 
+  const handleDeleteWallet = async (index) => {
+    if (!user) return;
+    if (!canDeleteWallet({ wallets })) {
+      showToast('Cần giữ lại ít nhất một ví.', 'warning');
+      return;
+    }
+    const name = wallets?.[index];
+    if (!name) return;
+    const balance = Number(walletBalances?.[name] || 0);
+    const balanceNote = balance !== 0
+      ? ` Số dư ${utils.formatVND(balance)} sẽ không còn tính vào thực tế.`
+      : '';
+    if (!window.confirm(`Xóa ví "${name}"? Giao dịch cũ vẫn giữ tên ví này.${balanceNote}`)) return;
+    await deleteWalletFromFirestore({
+      getDocRef,
+      wallets,
+      index,
+      walletName: name,
+    });
+    setEditingId(null);
+    setSettingsForm((form) => ({ ...form, walletName: '' }));
+    showToast('Đã xóa ví', 'success');
+  };
+
   const handleSaveCategory = async () => {
      if (!isCategoryFormReady(settingsForm)) return;
      const cleanName = normalizeCategoryName(settingsForm.categoryName);
@@ -878,6 +903,7 @@ export default function App() {
               logic={logic}
               handleSaveBudget={handleSaveBudget}
               handleSaveWallet={handleSaveWallet}
+              handleDeleteWallet={handleDeleteWallet}
               handleSaveCategory={handleSaveCategory}
               handleDeleteCategory={handleDeleteCategory}
               handleSaveGoal={handleSaveGoal}
