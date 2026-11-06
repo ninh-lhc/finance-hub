@@ -12,6 +12,7 @@ import {
   getCategoryNameAtIndex,
   shouldRenameCategory,
   buildCategoriesSettings,
+  removeCategoryAtIndex,
   getTransactionMonthCollectionNames,
   buildWalletReferencePatch,
   buildCategoryReferencePatch,
@@ -148,4 +149,23 @@ export async function saveCategoryToFirestore({
     { merge: true },
   );
   return { outcome: 'saved' };
+}
+
+export async function deleteCategoryFromFirestore({
+  getDocRef,
+  categories,
+  categoryType,
+  index,
+}) {
+  const newCatsList = removeCategoryAtIndex({ categories, categoryType, index });
+  const newCategories = buildCategoriesSettings({
+    categories,
+    categoryType,
+    newCatsList,
+  });
+  await setDoc(
+    getDocRef('settings', 'general'),
+    { categories: newCategories },
+    { merge: true },
+  );
 }

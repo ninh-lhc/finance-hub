@@ -8,6 +8,18 @@ import DonutChart from '../../components/common/DonutChart.jsx';
 import ProgressBar from '../../components/common/ProgressBar.jsx';
 import MonthComparisonPanel, { DeltaLabel } from './MonthComparisonPanel.jsx';
 
+function compactVnd(amount) {
+  const value = Number(amount) || 0;
+  if (value <= 0) return '0';
+  if (value >= 1000000) {
+    const millions = value / 1000000;
+    const digits = millions >= 10 ? 0 : 1;
+    return `${millions.toFixed(digits).replace('.0', '')}tr`;
+  }
+  if (value >= 1000) return `${Math.round(value / 1000)}k`;
+  return `${Math.round(value)}`;
+}
+
 function formatTopWalletLabel(name) {
   if (name === 'Chưa có ví' || !name) {
     return 'Chưa có';
@@ -65,6 +77,7 @@ export default function DashboardView(props) {
     setFilterCategory,
     setFilterWallet,
     setSearchQuery,
+    handleEditTransaction,
   } = props;
 
   const openPreviousMonth = () => {
@@ -202,7 +215,7 @@ export default function DashboardView(props) {
                            </div>
                         </div>
                         
-                        <div className="relative flex items-end justify-between h-[100px] gap-2 sm:gap-4 mt-2 z-10 px-2">
+                        <div className="relative flex items-end justify-between h-[132px] gap-2 sm:gap-4 mt-2 z-10 px-2">
                            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20">
                               <div className="w-full border-t border-dashed border-gray-500"></div>
                               <div className="w-full border-t border-dashed border-gray-500"></div>
@@ -210,13 +223,9 @@ export default function DashboardView(props) {
                            </div>
                            
                            {logic.weeklyExpenses.map((item, i) => (
-                              <div key={i} className="flex-1 flex flex-col items-center justify-end h-full group relative z-10 cursor-pointer">
-                                 <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all duration-200 transform group-hover:-translate-y-1 bg-[#2B3674] text-white text-[10px] font-black px-3 py-1.5 rounded-lg pointer-events-none whitespace-nowrap z-20 shadow-xl border border-white/10 flex flex-col items-center">
-                                    {utils.formatVND(item.total)}
-                                    <div className="absolute -bottom-1 w-2 h-2 bg-[#2B3674] rotate-45 border-r border-b border-white/10"></div>
-                                 </div>
-                                 
-                                 <div className="w-full max-w-[36px] bg-[#111C44] rounded-full group-hover:bg-[#15204c] transition-colors relative flex justify-end flex-col overflow-hidden shadow-inner border border-white/5" style={{height: '100%'}}>
+                              <div key={i} title={utils.formatVND(item.total)} className="flex-1 flex flex-col items-center justify-end h-full group relative z-10">
+                                 <span className="text-[8px] font-black text-gray-300 mb-1 tabular-nums">{compactVnd(item.total)}</span>
+                                 <div className="w-full max-w-[36px] flex-1 bg-[#111C44] rounded-full group-hover:bg-[#15204c] transition-colors relative flex justify-end flex-col overflow-hidden shadow-inner border border-white/5">
                                     <div className="w-full bg-gradient-to-t from-[#EE5D50] to-[#FF938A] rounded-full transition-all duration-1000 ease-out group-hover:brightness-110 shadow-[0_0_15px_rgba(238,93,80,0.5)]" style={{height: `${logic.maxWeeklyExpense > 0 ? (item.total / logic.maxWeeklyExpense) * 100 : 0}%`, minHeight: item.total > 0 ? '8px' : '0'}}></div>
                                  </div>
                                  <span className={`text-[9px] font-bold mt-3 uppercase tracking-tighter transition-colors ${i === 6 && logic.isCurrentMonthView ? 'text-[#05CD99]' : 'text-gray-500 group-hover:text-gray-300'}`}>{item.label}</span>
@@ -400,7 +409,7 @@ export default function DashboardView(props) {
                            </div>
                         ) : (
                            logic.monthData.slice(0, 8).map((t) => (
-                              <div key={t.id} className="flex items-center justify-between p-3 border border-gray-50 rounded-2xl bg-[#F8F9FA] hover:bg-white hover:shadow-sm transition-all cursor-pointer">
+                              <div key={t.id} onClick={() => handleEditTransaction(t)} className="flex items-center justify-between p-3 border border-gray-50 rounded-2xl bg-[#F8F9FA] hover:bg-white hover:shadow-sm transition-all cursor-pointer">
                                  <div className="flex items-center gap-3 min-w-0">
                                     <div className="w-10 h-10 rounded-[14px] flex items-center justify-center flex-shrink-0" style={{backgroundColor: `${logic.getCategoryColor(t.category)}15`, color: logic.getCategoryColor(t.category)}}>
                                        {t.category.includes('Chuyển khoản') ? <ArrowRightLeft size={16}/> : t.type === 'INCOME' ? <ArrowUpRight size={16}/> : <ArrowDownLeft size={16}/>}

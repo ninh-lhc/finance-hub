@@ -42,6 +42,12 @@ export function filterByYearMonth(transactions, year, month) {
   });
 }
 
+export function summarizeCounted(transactions) {
+  const income = sumAmounts(transactions, isCountedIncome);
+  const expense = sumAmounts(transactions, isCountedExpense);
+  return { income, expense, surplus: income - expense };
+}
+
 export function buildAmountDelta(current, previous) {
   const amount = current - previous;
   if (!previous) {

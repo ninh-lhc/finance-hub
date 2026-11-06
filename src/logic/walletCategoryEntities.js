@@ -64,6 +64,26 @@ export function shouldRenameCategory({ oldName, cleanName }) {
   return oldName !== cleanName;
 }
 
+export function hasCategoryNameConflict({ categories, categoryType, cleanName, editingId }) {
+  const list = categories?.[categoryType] || [];
+  return list.some((name, index) => name === cleanName && index !== editingId);
+}
+
+const OPENING_BALANCE_CATEGORY = 'Số dư đầu kỳ';
+
+export function removeCategoryAtIndex({ categories, categoryType, index }) {
+  const list = categories?.[categoryType] || [];
+  if (index < 0 || index >= list.length) return [...list];
+  return list.filter((_, itemIndex) => itemIndex !== index);
+}
+
+export function canDeleteCategory({ categories, categoryType, index }) {
+  const list = categories?.[categoryType] || [];
+  const name = list[index];
+  if (name !== OPENING_BALANCE_CATEGORY) return true;
+  return list.filter((item) => item === OPENING_BALANCE_CATEGORY).length > 1;
+}
+
 export function buildCategoriesSettings({ categories, categoryType, newCatsList }) {
   return { ...categories, [categoryType]: newCatsList };
 }

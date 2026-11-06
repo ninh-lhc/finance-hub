@@ -41,10 +41,11 @@ import {
   deleteBudgetFromFirestore,
   deleteGoalFromFirestore,
 } from './services/finance/planningService.js';
-import { isWalletFormReady, isCategoryFormReady } from './logic/walletCategoryEntities.js';
+import { isWalletFormReady, isCategoryFormReady, hasCategoryNameConflict, normalizeCategoryName, canDeleteCategory } from './logic/walletCategoryEntities.js';
 import {
   saveWalletToFirestore,
   saveCategoryToFirestore,
+  deleteCategoryFromFirestore,
 } from './services/finance/walletCategoryService.js';
 import {
   recalculateWalletBalancesInFirestore,
@@ -97,7 +98,6 @@ export default function App() {
   const [selectedWalletDetail, setSelectedWalletDetail] = useState(null);
   const [annualSelectedMonth, setAnnualSelectedMonth] = useState('ALL');
   const [annualSelectedExpenseCategory, setAnnualSelectedExpenseCategory] = useState(null);
-  const [annualExpandedTxId, setAnnualExpandedTxId] = useState(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('ALL');
@@ -119,8 +119,10 @@ export default function App() {
   const {
     annualTransactions,
     previousBoundaryTransactions,
+    previousYearTransactions,
     isFetchingAnnual,
     comparisonReady,
+    previousYearReady,
   } = useAnnualTransactions({
     user,
     syncCode,
@@ -682,6 +684,16 @@ export default function App() {
 
   const handleSaveCategory = async () => {
      if (!isCategoryFormReady(settingsForm)) return;
+     const cleanName = normalizeCategoryName(settingsForm.categoryName);
+     if (hasCategoryNameConflict({
+       categories,
+       categoryType: settingsForm.categoryType,
+       cleanName,
+       editingId,
+     })) {
+       showToast('Danh mục này đã có.', 'warning');
+       return;
+     }
      const result = await saveCategoryToFirestore({
        getCollectionRef,
        getDocRef,
@@ -694,6 +706,27 @@ export default function App() {
        result.outcome === 'renamed' ? 'Cập nhật danh mục thành công!' : 'Đã lưu danh mục mới!',
        'success',
      );
+  };
+
+  const handleDeleteCategory = async (index) => {
+    if (!user) return;
+    const categoryType = settingsForm.categoryType;
+    if (!canDeleteCategory({ categories, categoryType, index })) {
+      showToast('Cần giữ lại danh mục Số dư đầu kỳ.', 'warning');
+      return;
+    }
+    const name = categories?.[categoryType]?.[index];
+    if (!name) return;
+    if (!window.confirm(`Xóa danh mục "${name}"? Giao dịch cũ vẫn giữ tên này.`)) return;
+    await deleteCategoryFromFirestore({
+      getDocRef,
+      categories,
+      categoryType,
+      index,
+    });
+    setEditingId(null);
+    setSettingsForm((form) => ({ ...form, categoryName: '' }));
+    showToast('Đã xóa danh mục', 'success');
   };
 
   const handleSaveGoal = async () => {
@@ -768,6 +801,7 @@ export default function App() {
               setFilterCategory={setFilterCategory}
               setFilterWallet={setFilterWallet}
               setSearchQuery={setSearchQuery}
+              handleEditTransaction={handleEditTransaction}
             />
          )}
 
@@ -807,12 +841,12 @@ export default function App() {
               setAnnualSelectedMonth={setAnnualSelectedMonth}
               annualSelectedExpenseCategory={annualSelectedExpenseCategory}
               setAnnualSelectedExpenseCategory={setAnnualSelectedExpenseCategory}
-              annualExpandedTxId={annualExpandedTxId}
-              setAnnualExpandedTxId={setAnnualExpandedTxId}
               isFetchingAnnual={isFetchingAnnual}
               handleExportCSV={handleExportCSV}
               generateAnnualAIAdvice={generateAnnualAIAdvice}
               handleEditTransaction={handleEditTransaction}
+              previousYearTransactions={previousYearTransactions}
+              previousYearReady={previousYearReady}
             />
          )}
 
@@ -845,6 +879,7 @@ export default function App() {
               handleSaveBudget={handleSaveBudget}
               handleSaveWallet={handleSaveWallet}
               handleSaveCategory={handleSaveCategory}
+              handleDeleteCategory={handleDeleteCategory}
               handleSaveGoal={handleSaveGoal}
               resetWalletBalance={resetWalletBalance}
               dataSourceDiagnostics={dataSourceDiagnostics}

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import utils from '../../utils/format.js';
 import { buildAmountDelta } from '../../logic/monthComparison.js';
@@ -63,6 +64,7 @@ export default function MonthComparisonPanel({
   onSelectMonth,
   onSelectCategory,
 }) {
+  const [showCategories, setShowCategories] = useState(false);
   if (!comparison) return null;
   const prevLabel = `T${comparison.previousMonth + 1}${comparison.previousYear !== selectedYear ? `/${comparison.previousYear}` : ''}`;
 
@@ -108,7 +110,15 @@ export default function MonthComparisonPanel({
             </div>
           </div>
           <div className="lg:col-span-7 space-y-3">
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Theo danh mục</p>
+            <button
+              type="button"
+              onClick={() => setShowCategories((open) => !open)}
+              className="lg:hidden text-[10px] font-black text-[#4318FF] uppercase tracking-widest bg-transparent border-0 p-0"
+            >
+              {showCategories ? 'Ẩn danh mục' : 'Xem so sánh danh mục'}
+            </button>
+            <p className="hidden lg:block text-[10px] font-black text-gray-400 uppercase tracking-widest">Theo danh mục</p>
+            <div className={`${showCategories ? 'space-y-3' : 'hidden'} lg:block lg:space-y-3`}>
             {comparison.categories.length === 0 ? (
               <p className="text-[10px] font-bold text-gray-400">Chưa có khoản chi để so sánh.</p>
             ) : comparison.categories.slice(0, 6).map((item) => {
@@ -135,6 +145,7 @@ export default function MonthComparisonPanel({
                 </button>
               );
             })}
+            </div>
           </div>
         </div>
       )}

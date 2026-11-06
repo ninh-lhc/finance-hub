@@ -12,12 +12,60 @@ import {
   buildCategoryReferencePatch,
   shouldRenameWallet,
   shouldRenameCategory,
+  hasCategoryNameConflict,
+  removeCategoryAtIndex,
+  canDeleteCategory,
 } from './walletCategoryEntities.js';
 
 describe('isWalletFormReady', () => {
   it('requires wallet name', () => {
     expect(isWalletFormReady({ walletName: 'Momo' })).toBe(true);
     expect(isWalletFormReady({ walletName: '' })).toBe(false);
+  });
+});
+
+describe('hasCategoryNameConflict', () => {
+  const categories = { INCOME: ['Lương', 'Số dư đầu kỳ'], EXPENSE: ['Ăn uống'] };
+
+  it('blocks a second category with the same name', () => {
+    expect(hasCategoryNameConflict({
+      categories,
+      categoryType: 'INCOME',
+      cleanName: 'Số dư đầu kỳ',
+      editingId: null,
+    })).toBe(true);
+  });
+
+  it('allows saving the category currently being renamed', () => {
+    expect(hasCategoryNameConflict({
+      categories,
+      categoryType: 'INCOME',
+      cleanName: 'Lương',
+      editingId: 0,
+    })).toBe(false);
+  });
+});
+
+describe('removeCategoryAtIndex', () => {
+  it('removes one copy and leaves the other', () => {
+    expect(removeCategoryAtIndex({
+      categories: { INCOME: ['Lương', 'Số dư đầu kỳ', 'Số dư đầu kỳ'] },
+      categoryType: 'INCOME',
+      index: 2,
+    })).toEqual(['Lương', 'Số dư đầu kỳ']);
+  });
+});
+
+describe('canDeleteCategory', () => {
+  it('keeps the last opening-balance category', () => {
+    const categories = { INCOME: ['Lương', 'Số dư đầu kỳ'] };
+    expect(canDeleteCategory({ categories, categoryType: 'INCOME', index: 1 })).toBe(false);
+    expect(canDeleteCategory({ categories, categoryType: 'INCOME', index: 0 })).toBe(true);
+  });
+
+  it('allows deleting a duplicate opening-balance category', () => {
+    const categories = { INCOME: ['Số dư đầu kỳ', 'Số dư đầu kỳ'] };
+    expect(canDeleteCategory({ categories, categoryType: 'INCOME', index: 1 })).toBe(true);
   });
 });
 

@@ -99,21 +99,21 @@ export default function TransactionsView(props) {
 
                   {monthComparison?.ready && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                      <div className="bg-[#F4F7FE] rounded-2xl px-4 py-3 text-left">
+                      <div className={`rounded-2xl px-4 py-3 text-left border ${filterType === 'INCOME' ? 'bg-white border-[#4318FF] shadow-sm' : 'bg-[#F4F7FE] border-transparent'}`}>
                         <button type="button" onClick={() => setFilterType('INCOME')} className="w-full text-left bg-transparent border-0 p-0">
                           <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Thu tháng này</p>
                           <p className="text-sm font-black text-[#05CD99] mt-1">{utils.formatVND(monthComparison.income)}</p>
                         </button>
                         <p className="mt-1"><DeltaLabel delta={monthComparison.incomeDelta} prefix={`so với T${monthComparison.previousMonth + 1}`} onClick={openPreviousMonth} /></p>
                       </div>
-                      <div className="bg-[#F4F7FE] rounded-2xl px-4 py-3 text-left">
+                      <div className={`rounded-2xl px-4 py-3 text-left border ${filterType === 'EXPENSE' ? 'bg-white border-[#EE5D50] shadow-sm' : 'bg-[#F4F7FE] border-transparent'}`}>
                         <button type="button" onClick={() => setFilterType('EXPENSE')} className="w-full text-left bg-transparent border-0 p-0">
                           <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Chi tháng này</p>
                           <p className="text-sm font-black text-[#EE5D50] mt-1">{utils.formatVND(monthComparison.expense)}</p>
                         </button>
                         <p className="mt-1"><DeltaLabel delta={monthComparison.expenseDelta} invert prefix={`so với T${monthComparison.previousMonth + 1}`} onClick={openPreviousMonth} /></p>
                       </div>
-                      <div className="bg-[#F4F7FE] rounded-2xl px-4 py-3 text-left">
+                      <div className={`rounded-2xl px-4 py-3 text-left border ${filterType === 'ALL' ? 'bg-white border-[#1B2559] shadow-sm' : 'bg-[#F4F7FE] border-transparent'}`}>
                         <button type="button" onClick={() => { setFilterType('ALL'); setFilterCategory('ALL'); setFilterWallet('ALL'); }} className="w-full text-left bg-transparent border-0 p-0">
                           <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Tích lũy</p>
                           <p className="text-sm font-black text-[#1B2559] mt-1">{utils.formatVND(monthComparison.surplus)}</p>
@@ -183,8 +183,7 @@ export default function TransactionsView(props) {
                      <table className="w-full text-xs">
                         <thead className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] border-b border-gray-50 text-left">
                            <tr>
-                              <th className="pb-5 pl-4">Thời gian</th>
-                              <th className="pb-5">Nội dung</th>
+                              <th className="pb-5 pl-4">Nội dung</th>
                               <th className="pb-5 text-center">Danh mục</th>
                               <th className="pb-5 text-center">Nguồn</th>
                               <th className="pb-5 text-right pr-4">Số tiền</th>
@@ -195,12 +194,11 @@ export default function TransactionsView(props) {
                            {groupedTransactions.map((group) => (
                             <Fragment key={group.date || 'unknown'}>
                               <tr>
-                                 <td colSpan={6} className="pt-5 pb-1 pl-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">{group.date ? utils.formatDisplayDate(group.date) : 'Không ngày'}</td>
+                                 <td colSpan={5} className="pt-5 pb-1 pl-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">{group.date ? utils.formatDisplayDate(group.date) : 'Không ngày'}</td>
                               </tr>
                               {group.items.map(t => (
                               <tr key={t.id} onClick={() => handleEditTransaction(t)} className="hover:bg-gray-50/80 transition-all cursor-pointer">
-                                 <td className="py-4 pl-4 font-black text-gray-400 italic tabular-nums">{utils.formatDisplayDate(t.date)}</td>
-                                 <td className="py-4 font-black text-[#1B2559] uppercase tracking-tight text-sm">{t.note}</td>
+                                 <td className="py-4 pl-4 font-black text-[#1B2559] uppercase tracking-tight text-sm">{t.note}</td>
                                  <td className="py-4 text-center">
                                     <button type="button" onClick={(event) => { event.stopPropagation(); applyCategoryFilter(t); }} className="px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border border-gray-100 bg-white shadow-sm" style={{ color: logic.getCategoryColor(t.category) }}>
                                        {t.category}

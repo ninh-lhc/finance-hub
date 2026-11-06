@@ -34,6 +34,7 @@ export default function SettingsView(props) {
     handleSaveBudget,
     handleSaveWallet,
     handleSaveCategory,
+    handleDeleteCategory,
     handleSaveGoal,
     resetWalletBalance,
     dataSourceDiagnostics,
@@ -173,20 +174,24 @@ export default function SettingsView(props) {
             <div className="flex justify-between items-center">
               <h3 className="text-base font-black uppercase tracking-widest text-[#1B2559]">Phân loại Danh mục</h3>
               <div className="flex bg-[#F8F9FA] p-1 rounded-xl">
-                <button onClick={() => setSettingsForm({...settingsForm, categoryType: 'INCOME', categoryName: ''})} className={`px-4 py-2 rounded-lg text-[9px] font-black transition-all ${settingsForm.categoryType === 'INCOME' ? 'bg-white text-[#05CD99] shadow-sm' : 'text-gray-400'}`}>THU</button>
-                <button onClick={() => setSettingsForm({...settingsForm, categoryType: 'EXPENSE', categoryName: ''})} className={`px-4 py-2 rounded-lg text-[9px] font-black transition-all ${settingsForm.categoryType === 'EXPENSE' ? 'bg-white text-[#EE5D50] shadow-sm' : 'text-gray-400'}`}>CHI</button>
+                <button type="button" onClick={() => { setEditingId(null); setSettingsForm({...settingsForm, categoryType: 'INCOME', categoryName: ''}); }} className={`px-4 py-2 rounded-lg text-[9px] font-black transition-all ${settingsForm.categoryType === 'INCOME' ? 'bg-white text-[#05CD99] shadow-sm' : 'text-gray-400'}`}>THU</button>
+                <button type="button" onClick={() => { setEditingId(null); setSettingsForm({...settingsForm, categoryType: 'EXPENSE', categoryName: ''}); }} className={`px-4 py-2 rounded-lg text-[9px] font-black transition-all ${settingsForm.categoryType === 'EXPENSE' ? 'bg-white text-[#EE5D50] shadow-sm' : 'text-gray-400'}`}>CHI</button>
               </div>
             </div>
             <div className="flex gap-4 p-5 bg-[#F8F9FA] rounded-[24px] border border-gray-100">
-              <input type="text" placeholder="Nhập tên hạng mục..." className="bg-transparent font-black text-[#1B2559] outline-none flex-1 text-xs" value={settingsForm.categoryName} onChange={(e) => setSettingsForm({...settingsForm, categoryName: e.target.value})} />
-              <button onClick={handleSaveCategory} className="px-8 py-3 bg-[#1B2559] text-white rounded-xl text-[10px] font-black shadow-lg">LƯU</button>
+              <input type="text" placeholder="Nhập tên hạng mục..." className="bg-transparent font-black text-[#1B2559] outline-none flex-1 text-xs min-w-0" value={settingsForm.categoryName} onChange={(e) => setSettingsForm({...settingsForm, categoryName: e.target.value})} />
+              {editingId !== null && (
+                <button type="button" onClick={() => { setEditingId(null); setSettingsForm({...settingsForm, categoryName: ''}); }} className="px-4 py-3 bg-white text-[#A3AED0] rounded-xl text-[10px] font-black border border-gray-100">HỦY</button>
+              )}
+              <button type="button" onClick={handleSaveCategory} className="px-6 sm:px-8 py-3 bg-[#1B2559] text-white rounded-xl text-[10px] font-black shadow-lg shrink-0">{editingId !== null ? 'CẬP NHẬT' : 'LƯU'}</button>
             </div>
             <div className="flex flex-wrap gap-3">
               {(categories[settingsForm.categoryType] || []).map((cat, i) => (
-                <div key={i} className="px-5 py-3 rounded-2xl bg-[#F8F9FA] border border-gray-100 flex items-center gap-3 group">
-                  <span className="w-1.5 h-1.5 rounded-full" style={{backgroundColor: logic.getCategoryColor(cat)}}></span>
+                <div key={`${settingsForm.categoryType}-${i}`} className={`px-4 py-2.5 rounded-2xl border flex items-center gap-2 ${editingId === i ? 'bg-white border-[#4318FF]' : 'bg-[#F8F9FA] border-gray-100'}`}>
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{backgroundColor: logic.getCategoryColor(cat)}}></span>
                   <span className="text-xs font-black text-[#111C44] uppercase tracking-tighter">{cat}</span>
-                  <button onClick={() => { setEditingId(i); setSettingsForm({...settingsForm, categoryName: cat}); }} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-indigo-600"><Edit2 size={12}/></button>
+                  <button type="button" aria-label={`Sửa ${cat}`} onClick={() => { setEditingId(i); setSettingsForm({...settingsForm, categoryName: cat}); }} className="p-1.5 text-[#4318FF] bg-white rounded-lg"><Edit2 size={12}/></button>
+                  <button type="button" aria-label={`Xóa ${cat}`} onClick={() => handleDeleteCategory(i)} className="p-1.5 text-[#EE5D50] bg-white rounded-lg"><Trash2 size={12}/></button>
                 </div>
               ))}
             </div>

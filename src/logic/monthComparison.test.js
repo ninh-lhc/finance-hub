@@ -4,6 +4,7 @@ import {
   previousPeriod,
   isCountedIncome,
   isCountedExpense,
+  summarizeCounted,
 } from './monthComparison.js';
 
 const tx = (partial) => ({
@@ -28,6 +29,18 @@ describe('counted transaction filters', () => {
     expect(isCountedIncome(tx({ type: 'INCOME', category: 'Lương', amount: 1, date: '2025-04-05' }))).toBe(true);
     expect(isCountedIncome(tx({ type: 'INCOME', category: 'Số dư đầu kỳ', amount: 1, date: '2025-01-01' }))).toBe(false);
     expect(isCountedExpense(tx({ type: 'EXPENSE', category: 'Chuyển khoản đi', amount: 1, date: '2025-04-02' }))).toBe(false);
+  });
+});
+
+describe('summarizeCounted', () => {
+  it('sums income and expense without opening balances or transfers', () => {
+    const summary = summarizeCounted([
+      tx({ type: 'INCOME', category: 'Lương', amount: 100, date: '2025-04-05' }),
+      tx({ type: 'INCOME', category: 'Số dư đầu kỳ', amount: 50, date: '2025-04-01' }),
+      tx({ type: 'EXPENSE', category: 'Ăn uống', amount: 30, date: '2025-04-08' }),
+      tx({ type: 'EXPENSE', category: 'Chuyển khoản đi', amount: 20, date: '2025-04-09' }),
+    ]);
+    expect(summary).toEqual({ income: 100, expense: 30, surplus: 70 });
   });
 });
 
