@@ -24,6 +24,8 @@ import {
   parseFinanceCsv,
   serializeFinanceCsv,
   serializeFinanceImportSampleCsv,
+  omitImportedDuplicates,
+  sumImportImpact,
 } from './logic/financeCsv.js';
 import {
   saveTransactionToFirestore,
@@ -40,6 +42,7 @@ import {
   readGoalLink,
   selectedGoalId,
   validateGoalLinks,
+  goalAmountWasEdited,
 } from './logic/goalMovement.js';
 import {
   saveBudgetToFirestore,
@@ -274,6 +277,7 @@ export default function App() {
       deriveFinanceLogic({
         transactions,
         annualTransactions,
+        boundaryTransactions: previousBoundaryTransactions,
         walletBalances,
         selectedMonth,
         selectedYear,
@@ -283,7 +287,7 @@ export default function App() {
         goals,
         budgets,
       }),
-    [transactions, annualTransactions, walletBalances, selectedMonth, selectedYear, wallets, categories, annualSelectedMonth, goals, budgets],
+    [transactions, annualTransactions, previousBoundaryTransactions, walletBalances, selectedMonth, selectedYear, wallets, categories, annualSelectedMonth, goals, budgets],
   );
 
   const monthComparison = useMemo(() => {
@@ -635,7 +639,7 @@ export default function App() {
 
   const handleExportCSV = () => {
     const isAnnualExport = activeTab === 'annual';
-    const sourceData = isAnnualExport ? annualTransactions : logic.filteredTransactions;
+    const sourceData = isAnnualExport ? annualTransactions : transactions;
     if (sourceData.length === 0) { showToast('Không có dữ liệu để xuất!', 'warning'); return; }
 
     const csvContent = serializeFinanceCsv({ transactions: sourceData });
@@ -669,12 +673,29 @@ export default function App() {
             const text = e.target.result;
             const parsed = parseFinanceCsv(text, { wallets, categories });
             if (parsed.validCount === 0) {
-              const firstError = parsed.errors[0]?.message || 'Không có dữ liệu hợp lệ';
-              throw new Error(firstError);
+              showToast(parsed.errors[0]?.message || 'Không có dữ liệu hợp lệ', 'error');
+              return;
             }
 
-            const payloads = parsed.rows;
-            const { totalImpact, validCount, lastImportedDate, newWallets, newIncCats, newExpCats } = parsed;
+            const collectionNames = [...new Set(parsed.rows.map((row) => row.col))];
+            const existingSnaps = await Promise.all(
+              collectionNames.map((name) => getDocs(getCollectionRef(name))),
+            );
+            const existingTransactions = existingSnaps.flatMap((snap) => snap.docs.map((docSnap) => docSnap.data()));
+            const deduped = omitImportedDuplicates(parsed.rows, existingTransactions);
+            if (deduped.rows.length === 0) {
+              showToast('Các dòng này đã có trong sổ.', 'warning');
+              return;
+            }
+
+            const payloads = deduped.rows;
+            const totalImpact = sumImportImpact(payloads);
+            const { newWallets, newIncCats, newExpCats } = parsed;
+            const validCount = payloads.length;
+            const lastImportedDate = payloads.reduce((latest, row) => {
+              const date = row.data.date;
+              return !latest || date > latest ? date : latest;
+            }, null);
 
             const chunkSize = 450;
             for (let i = 0; i < payloads.length; i += chunkSize) {
@@ -709,7 +730,11 @@ export default function App() {
                 setSelectedMonth(parseInt(lastM) - 1);
             }
 
-            showToast(`Đã nhập thành công ${validCount} giao dịch!`, 'success');
+            const skippedErrors = parsed.errors.length;
+            let importMessage = `Đã nhập ${validCount} giao dịch.`;
+            if (deduped.skipped > 0) importMessage += ` Bỏ qua ${deduped.skipped} dòng trùng.`;
+            if (skippedErrors > 0) importMessage += ` Bỏ qua ${skippedErrors} dòng lỗi.`;
+            showToast(importMessage, skippedErrors > 0 ? 'warning' : 'success');
             setAnnualRefreshTick(v => v + 1);
         } catch (err) {
             console.error(err);
@@ -844,8 +869,24 @@ export default function App() {
   const handleSaveGoal = async () => {
      if (!user || !isGoalFormReady(settingsForm)) return;
      const payload = buildGoalPayload({ form: settingsForm });
-     await saveGoalToFirestore({ getCollectionRef, getDocRef, payload, editingId });
-     cancelEdit(); showToast('Đã lưu kế hoạch tích lũy', 'success');
+     const previousGoal = editingId ? (goals || []).find((goal) => goal.id === editingId) : null;
+     const amountEdited = previousGoal
+       ? goalAmountWasEdited(previousGoal.amount, payload.amount)
+       : false;
+     await saveGoalToFirestore({
+       getCollectionRef,
+       getDocRef,
+       payload,
+       editingId,
+       detachLinks: amountEdited,
+     });
+     cancelEdit();
+     showToast(
+       amountEdited
+         ? 'Đã lưu số quỹ. Xóa giao dịch cũ sẽ không cộng trừ lại quỹ này.'
+         : 'Đã lưu kế hoạch tích lũy',
+       'success',
+     );
   };
 
   const hour = new Date().getHours();

@@ -23,6 +23,16 @@ export function readGoalLink(transaction) {
   };
 }
 
+export function goalAmountWasEdited(previousAmount, nextAmount) {
+  return Number(previousAmount || 0) !== Number(nextAmount || 0);
+}
+
+/** A hand-edited fund total replaces the old links, so a later delete must not apply them again. */
+export function goalLinkDetachPatch(transaction, goalId) {
+  if (!goalId || transaction?.goalId !== goalId) return null;
+  return { goalId: '', goalDelta: 0 };
+}
+
 export function selectedGoalId(goals, walletName, goalId) {
   if (!goalId) return '';
   return goalsOnWallet(goals, walletName).some((goal) => goal.id === goalId) ? goalId : '';

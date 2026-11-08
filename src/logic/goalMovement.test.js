@@ -7,6 +7,8 @@ import {
   netGoalDeltas,
   goalAmountAfterUndo,
   validateGoalLinks,
+  goalAmountWasEdited,
+  goalLinkDetachPatch,
 } from './goalMovement.js';
 
 const goals = [
@@ -20,6 +22,21 @@ describe('goalsOnWallet', () => {
     expect(goalsOnWallet(goals, 'Viettel Money').map((goal) => goal.id)).toEqual(['save', 'emergency']);
     expect(goalsOnWallet(goals, 'Tiền mặt')).toEqual([]);
     expect(goalsOnWallet(goals, '')).toEqual([]);
+  });
+});
+
+describe('goalAmountWasEdited', () => {
+  it('detaches old links only when the saved fund total changes', () => {
+    expect(goalAmountWasEdited(6_000_000, 5_000_000)).toBe(true);
+    expect(goalAmountWasEdited(6_000_000, 6_000_000)).toBe(false);
+    expect(goalLinkDetachPatch(
+      { goalId: 'emergency', goalDelta: -200_000 },
+      'emergency',
+    )).toEqual({ goalId: '', goalDelta: 0 });
+    expect(goalLinkDetachPatch(
+      { goalId: 'save', goalDelta: 1_000_000 },
+      'emergency',
+    )).toBe(null);
   });
 });
 

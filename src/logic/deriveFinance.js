@@ -5,6 +5,7 @@ import { locksForWallet } from './planningEntities.js';
 export const deriveFinanceLogic = ({
   transactions,
   annualTransactions,
+  boundaryTransactions = [],
   walletBalances,
   selectedMonth,
   selectedYear,
@@ -98,12 +99,18 @@ export const deriveFinanceLogic = ({
           return { dateStr, label: dayName, total: 0 };
       });
 
-      monthData.forEach(t => {
-          if (t.type === 'EXPENSE' && t.category !== 'Chuyển khoản đi') {
-              const dayObj = weeklyExpenses.find(d => d.dateStr === t.date);
-              if (dayObj) dayObj.total += Number(t.amount || 0);
-          }
-      });
+      const countedExpenseIds = new Set();
+      const addWeekExpense = (transaction) => {
+          if (!transaction || transaction.type !== 'EXPENSE' || transaction.category === 'Chuyển khoản đi') return;
+          const identity = transaction.id || `${transaction.date}|${transaction.amount}|${transaction.category}|${transaction.note || ''}`;
+          if (countedExpenseIds.has(identity)) return;
+          countedExpenseIds.add(identity);
+          const dayObj = weeklyExpenses.find(d => d.dateStr === transaction.date);
+          if (dayObj) dayObj.total += Number(transaction.amount || 0);
+      };
+      monthData.forEach(addWeekExpense);
+      (annualTransactions || []).forEach(addWeekExpense);
+      (boundaryTransactions || []).forEach(addWeekExpense);
   } else {
       // NẾU LÀ THÁNG TRONG QUÁ KHỨ: Hiển thị tổng hợp theo 4 Tuần
       weeklyExpenses = [
@@ -165,7 +172,11 @@ export const deriveFinanceLogic = ({
   });
   const scopeExpenseChart = Object.entries(scopeExpenseCats).sort((a,b) => b[1] - a[1]).map(([name, value]) => ({ name, value, color: getCategoryColor(name) }));
 
-  const totalGoalsAmount = (goals || []).reduce((s, g) => s + Number(g.amount || 0), 0);
+  const activeWallets = new Set(wallets || []);
+  const totalGoalsAmount = (goals || []).reduce((sum, goal) => {
+    if (!goal?.wallet || !activeWallets.has(goal.wallet)) return sum;
+    return sum + Number(goal.amount || 0);
+  }, 0);
   const spendableBal = globalBal - totalGoalsAmount;
 
   return {

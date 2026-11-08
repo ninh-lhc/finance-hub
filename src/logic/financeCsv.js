@@ -163,7 +163,19 @@ export function normalizeImportDate(dateStr) {
       date = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
     }
   }
-  if (!date || date.length !== 10) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const year = Number(date.slice(0, 4));
+  const month = Number(date.slice(5, 7));
+  const day = Number(date.slice(8, 10));
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const checked = new Date(Date.UTC(year, month - 1, day));
+  if (
+    checked.getUTCFullYear() !== year
+    || checked.getUTCMonth() !== month - 1
+    || checked.getUTCDate() !== day
+  ) {
+    return null;
+  }
   return date;
 }
 
@@ -172,7 +184,10 @@ export function normalizeImportDate(dateStr) {
  * @returns {'INCOME' | 'EXPENSE' | null}
  */
 export function parseImportType(typeStr) {
-  return String(typeStr ?? '').toLowerCase().includes('thu') ? 'INCOME' : 'EXPENSE';
+  const text = String(typeStr ?? '').trim().toLowerCase();
+  if (text === 'thu nhập' || text === 'thu nhap' || text === 'thu' || text === 'income') return 'INCOME';
+  if (text === 'chi tiêu' || text === 'chi' || text === 'expense') return 'EXPENSE';
+  return null;
 }
 
 /**
@@ -236,7 +251,11 @@ export function parseFinanceCsv(csvText, options = {}) {
     let [dateStr, note, typeStr, category, wallet, amountStr] = cols;
     note = unsanitizeSpreadsheetText(note ?? '');
     category = unsanitizeSpreadsheetText(category ?? '') || 'Khác';
-    wallet = unsanitizeSpreadsheetText(wallet ?? '') || 'Tiền mặt';
+    wallet = unsanitizeSpreadsheetText(wallet ?? '').trim();
+    const knownWallets = initialWallets;
+    if (!wallet) {
+      wallet = knownWallets.length === 0 || knownWallets.includes('Tiền mặt') ? 'Tiền mặt' : '';
+    }
 
     const date = normalizeImportDate(dateStr);
     if (!date) {
@@ -245,6 +264,19 @@ export function parseFinanceCsv(csvText, options = {}) {
     }
 
     const type = parseImportType(typeStr);
+    if (!type) {
+      errors.push({ rowNumber, code: 'CSV_INVALID_TYPE', message: 'Phân loại phải là Thu nhập hoặc Chi tiêu.' });
+      continue;
+    }
+
+    if (!wallet) {
+      errors.push({ rowNumber, code: 'CSV_UNKNOWN_WALLET', message: 'Thiếu nguồn tiền.' });
+      continue;
+    }
+    if (knownWallets.length > 0 && !knownWallets.includes(wallet)) {
+      errors.push({ rowNumber, code: 'CSV_UNKNOWN_WALLET', message: `Không có ví "${wallet}".` });
+      continue;
+    }
 
     const amount = parseImportAmount(amountStr);
     if (amount == null) {
@@ -301,6 +333,60 @@ export function parseFinanceCsv(csvText, options = {}) {
     errors,
     warnings,
   };
+}
+
+/**
+ * Same identity the export writes back: the wallet that actually moved.
+ * @param {{ date?: string; type?: string; category?: string; wallet?: string; linkedWallet?: string; amount?: number; note?: string }} transaction
+ * @returns {string}
+ */
+export function transactionImportKey(transaction) {
+  const wallet = transaction?.linkedWallet || transaction?.wallet || '';
+  return [
+    transaction?.date || '',
+    transaction?.type || '',
+    transaction?.category || '',
+    wallet,
+    String(Number(transaction?.amount || 0)),
+    transaction?.note || '',
+  ].join('\u0001');
+}
+
+/**
+ * @param {Array<{ data: { date?: string; type?: string; category?: string; wallet?: string; linkedWallet?: string; amount?: number; note?: string } }>} rows
+ * @param {Array<{ date?: string; type?: string; category?: string; wallet?: string; linkedWallet?: string; amount?: number; note?: string }>} existingTransactions
+ * @returns {{ rows: typeof rows; skipped: number }}
+ */
+export function omitImportedDuplicates(rows, existingTransactions = []) {
+  const seen = new Set((existingTransactions || []).map((transaction) => transactionImportKey(transaction)));
+  const kept = [];
+  let skipped = 0;
+  (rows || []).forEach((row) => {
+    const key = transactionImportKey(row?.data);
+    if (seen.has(key)) {
+      skipped += 1;
+      return;
+    }
+    seen.add(key);
+    kept.push(row);
+  });
+  return { rows: kept, skipped };
+}
+
+/**
+ * @param {Array<{ data: { type?: string; wallet?: string; amount?: number } }>} rows
+ * @returns {Record<string, number>}
+ */
+export function sumImportImpact(rows) {
+  const totalImpact = {};
+  (rows || []).forEach((row) => {
+    const wallet = row?.data?.wallet;
+    const amount = Number(row?.data?.amount || 0);
+    if (!wallet || !amount) return;
+    const delta = row.data.type === 'INCOME' ? amount : -amount;
+    totalImpact[wallet] = (totalImpact[wallet] || 0) + delta;
+  });
+  return totalImpact;
 }
 
 /**

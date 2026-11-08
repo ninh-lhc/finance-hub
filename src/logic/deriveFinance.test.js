@@ -82,8 +82,10 @@ describe('deriveFinanceLogic', () => {
         wallets: ['Tiền mặt'],
         walletBalances: { 'Tiền mặt': 10_000 },
         goals: [
-          { id: 'g1', name: 'A', target: 20_000, amount: 3_000 },
-          { id: 'g2', name: 'B', target: 10_000, amount: 2_000 },
+          { id: 'g1', name: 'A', target: 20_000, amount: 3_000, wallet: 'Tiền mặt' },
+          { id: 'g2', name: 'B', target: 10_000, amount: 2_000, wallet: 'Tiền mặt' },
+          { id: 'g3', name: 'Chưa gắn', target: 1_000, amount: 9_000 },
+          { id: 'g4', name: 'Ví cũ', target: 1_000, amount: 4_000, wallet: 'Ví đã xóa' },
         ],
       }));
 
@@ -231,6 +233,45 @@ describe('deriveFinanceLogic', () => {
       expect(result.weeklyExpenses).toHaveLength(7);
       expect(result.weeklyExpenses.at(-1).label).toBe('Hôm nay');
       expect(result.weeklyExpenses.at(-1).total).toBe(100);
+    });
+
+    it('includes the previous month when the last 7 days cross the boundary', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-06-03T12:00:00'));
+
+      const result = deriveFinanceLogic(createBaseInput({
+        transactions: [
+          tx({ id: 'jun', type: 'EXPENSE', category: 'Ăn uống', amount: 40, date: '2026-06-02' }),
+        ],
+        annualTransactions: [
+          tx({ id: 'jun', type: 'EXPENSE', category: 'Ăn uống', amount: 40, date: '2026-06-02' }),
+          tx({ id: 'may', type: 'EXPENSE', category: 'Ăn uống', amount: 70, date: '2026-05-31' }),
+          tx({ id: 'xfer', type: 'EXPENSE', category: 'Chuyển khoản đi', amount: 500, date: '2026-05-31' }),
+          tx({ id: 'old', type: 'EXPENSE', category: 'Ăn uống', amount: 999, date: '2026-05-01' }),
+        ],
+      }));
+
+      expect(result.weeklyExpenses.find((day) => day.dateStr === '2026-05-31').total).toBe(70);
+      expect(result.weeklyExpenses.find((day) => day.dateStr === '2026-06-02').total).toBe(40);
+    });
+
+    it('includes December of the previous year on the first days of January', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-02T12:00:00'));
+
+      const result = deriveFinanceLogic(createBaseInput({
+        selectedMonth: 0,
+        selectedYear: 2026,
+        transactions: [
+          tx({ id: 'jan', type: 'EXPENSE', category: 'Ăn uống', amount: 10, date: '2026-01-02' }),
+        ],
+        boundaryTransactions: [
+          tx({ id: 'dec', type: 'EXPENSE', category: 'Ăn uống', amount: 30, date: '2025-12-31' }),
+        ],
+      }));
+
+      expect(result.weeklyExpenses.find((day) => day.dateStr === '2025-12-31').total).toBe(30);
+      expect(result.weeklyExpenses.find((day) => day.dateStr === '2026-01-02').total).toBe(10);
     });
   });
 });

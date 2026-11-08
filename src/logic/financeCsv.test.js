@@ -10,6 +10,8 @@ import {
   normalizeImportDate,
   parseImportAmount,
   parseImportType,
+  omitImportedDuplicates,
+  sumImportImpact,
 } from './financeCsv.js';
 
 describe('parseCsvLine', () => {
@@ -137,6 +139,39 @@ describe('parseFinanceCsv', () => {
     const csv = `${header}bad-date,,Chi tiêu,Ăn,Tiền mặt,1000`;
     const result = parseFinanceCsv(csv);
     expect(result.errors.some((e) => e.code === 'CSV_INVALID_DATE')).toBe(true);
+  });
+
+  it('rejects calendar dates that are not real days', () => {
+    const impossible = parseFinanceCsv(`${header}32/13/2026,,Chi tiêu,Ăn,Tiền mặt,1000`);
+    const february = parseFinanceCsv(`${header}31/02/2026,,Chi tiêu,Ăn,Tiền mặt,1000`);
+    const leap = parseFinanceCsv(`${header}29/02/2024,,Chi tiêu,Ăn,Tiền mặt,1000`);
+    expect(impossible.errors.some((e) => e.code === 'CSV_INVALID_DATE')).toBe(true);
+    expect(february.errors.some((e) => e.code === 'CSV_INVALID_DATE')).toBe(true);
+    expect(impossible.validCount).toBe(0);
+    expect(leap.validCount).toBe(1);
+    expect(leap.rows[0].data.date).toBe('2024-02-29');
+  });
+
+  it('rejects a type that only contains the letters thu', () => {
+    const csv = `${header}01/03/2026,,Thu hộ,Ăn,Tiền mặt,1000`;
+    const result = parseFinanceCsv(csv);
+    expect(result.errors.some((e) => e.code === 'CSV_INVALID_TYPE')).toBe(true);
+    expect(result.validCount).toBe(0);
+  });
+
+  it('rejects a blank type instead of treating it as an expense', () => {
+    const csv = `${header}01/03/2026,,,Ăn,Tiền mặt,1000`;
+    const result = parseFinanceCsv(csv);
+    expect(result.errors.some((e) => e.code === 'CSV_INVALID_TYPE')).toBe(true);
+  });
+
+  it('rejects a wallet that is not already in the book', () => {
+    const csv = `${header}01/03/2026,,Chi tiêu,Ăn,ViettelPay,1000`;
+    const result = parseFinanceCsv(csv, { wallets: ['Viettel Money', 'Tiền mặt'] });
+    expect(result.errors.some((e) => e.code === 'CSV_UNKNOWN_WALLET')).toBe(true);
+    expect(result.validCount).toBe(0);
+    expect(result.newWallets).toEqual(['Viettel Money', 'Tiền mặt']);
+    expect(result.totalImpact).toEqual({});
   });
 
   it('parses quoted note with comma', () => {
@@ -294,5 +329,22 @@ describe('helpers', () => {
   it('parseImportType detects thu/chi', () => {
     expect(parseImportType('Thu nhập')).toBe('INCOME');
     expect(parseImportType('Chi tiêu')).toBe('EXPENSE');
+    expect(parseImportType('Thu hộ')).toBe(null);
+    expect(parseImportType('')).toBe(null);
+  });
+
+  it('skips a row that matches an existing charged wallet', () => {
+    const rows = [
+      { data: { date: '2026-03-01', type: 'EXPENSE', category: 'Ăn', wallet: 'Agribank', amount: 1000, note: 'Cafe' } },
+      { data: { date: '2026-03-01', type: 'EXPENSE', category: 'Ăn', wallet: 'Agribank', amount: 1000, note: 'Cafe' } },
+      { data: { date: '2026-03-02', type: 'EXPENSE', category: 'Ăn', wallet: 'Agribank', amount: 2000, note: 'Cơm' } },
+    ];
+    const existing = [
+      { date: '2026-03-01', type: 'EXPENSE', category: 'Ăn', wallet: 'Momo', linkedWallet: 'Agribank', amount: 1000, note: 'Cafe' },
+    ];
+    const result = omitImportedDuplicates(rows, existing);
+    expect(result.skipped).toBe(2);
+    expect(result.rows).toHaveLength(1);
+    expect(sumImportImpact(result.rows)).toEqual({ Agribank: -2000 });
   });
 });

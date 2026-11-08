@@ -1,4 +1,29 @@
-import { addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { addDoc, updateDoc, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { db } from '../firebase/config.js';
+import { getTransactionMonthCollectionNames } from '../../logic/walletCategoryEntities.js';
+import { goalLinkDetachPatch } from '../../logic/goalMovement.js';
+
+const GOAL_DETACH_BATCH_SIZE = 400;
+
+async function detachGoalLinks({ getCollectionRef, goalId, currentYear }) {
+  const collectionNames = getTransactionMonthCollectionNames(currentYear);
+  const snaps = await Promise.all(collectionNames.map((name) => getDocs(getCollectionRef(name))));
+  const updates = [];
+  snaps.forEach((snap) => {
+    snap.docs.forEach((docSnap) => {
+      const patch = goalLinkDetachPatch(docSnap.data(), goalId);
+      if (patch) updates.push({ ref: docSnap.ref, patch });
+    });
+  });
+  for (let index = 0; index < updates.length; index += GOAL_DETACH_BATCH_SIZE) {
+    const batch = writeBatch(db);
+    updates.slice(index, index + GOAL_DETACH_BATCH_SIZE).forEach(({ ref, patch }) => {
+      batch.update(ref, patch);
+    });
+    await batch.commit();
+  }
+  return updates.length;
+}
 
 export async function saveBudgetToFirestore({
   getCollectionRef,
@@ -18,10 +43,14 @@ export async function saveGoalToFirestore({
   getDocRef,
   payload,
   editingId,
+  detachLinks = false,
+  currentYear = new Date().getFullYear(),
 }) {
   if (editingId) {
     await updateDoc(getDocRef('goals', editingId), payload);
-    return;
+    if (!detachLinks) return { detached: 0 };
+    const detached = await detachGoalLinks({ getCollectionRef, goalId: editingId, currentYear });
+    return { detached };
   }
   await addDoc(getCollectionRef('goals'), {
     ...payload,
