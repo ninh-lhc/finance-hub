@@ -35,9 +35,10 @@ export async function saveWalletToFirestore({
     const oldName = getWalletNameAtIndex({ wallets, editingId });
     if (shouldRenameWallet({ oldName, cleanName })) {
       const collectionNames = getTransactionMonthCollectionNames(currentYear);
-      const results = await Promise.all(
-        collectionNames.map((name) => getDocs(getCollectionRef(name))),
-      );
+      const [results, goalSnap] = await Promise.all([
+        Promise.all(collectionNames.map((name) => getDocs(getCollectionRef(name)))),
+        getDocs(getCollectionRef('goals')),
+      ]);
       const batch = writeBatch(db);
       const transferredBal = getWalletBalanceTransferAmount({
         walletBalances,
@@ -67,6 +68,12 @@ export async function saveWalletToFirestore({
             batch.update(docSnap.ref, patch);
           }
         });
+      });
+
+      goalSnap.docs.forEach((docSnap) => {
+        if (docSnap.data()?.wallet === oldName) {
+          batch.update(docSnap.ref, { wallet: cleanName });
+        }
       });
 
       await batch.commit();

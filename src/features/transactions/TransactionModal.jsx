@@ -47,6 +47,7 @@ export default function TransactionModal(props) {
     setUseLinkedWallet,
     handleCloseModal,
     onSaveTransaction,
+    isSavingTransaction,
     goals,
     walletBalances,
   } = props;
@@ -196,8 +197,8 @@ export default function TransactionModal(props) {
             <input type="date" className="w-full p-4 bg-[#F4F7FE] rounded-2xl text-[10px] font-black outline-none border-2 border-transparent focus:border-[#4318FF]/20" value={formData.date || utils.getLocalYMD()} onChange={e => setFormData({...formData, date: e.target.value})} />
           </div>
 
-          <button onClick={onSaveTransaction} disabled={goalBlocked} className={`w-full py-5 rounded-2xl font-black text-[10px] text-white shadow-xl uppercase tracking-[0.3em] active:scale-95 transition-all mt-4 disabled:opacity-40 disabled:cursor-not-allowed ${editingTxId ? 'bg-[#05CD99]' : formData.type === 'INCOME' ? 'bg-[#05CD99]' : formData.type === 'EXPENSE' ? 'bg-[#EE5D50]' : 'bg-[#4318FF]'}`}>
-            {editingTxId ? 'Lưu thay đổi' : 'Xác nhận giao dịch'}
+          <button onClick={onSaveTransaction} disabled={goalBlocked || isSavingTransaction} className={`w-full py-5 rounded-2xl font-black text-[10px] text-white shadow-xl uppercase tracking-[0.3em] active:scale-95 transition-all mt-4 disabled:opacity-40 disabled:cursor-not-allowed ${editingTxId ? 'bg-[#05CD99]' : formData.type === 'INCOME' ? 'bg-[#05CD99]' : formData.type === 'EXPENSE' ? 'bg-[#EE5D50]' : 'bg-[#4318FF]'}`}>
+            {isSavingTransaction ? 'Đang lưu...' : editingTxId ? 'Lưu thay đổi' : 'Xác nhận giao dịch'}
           </button>
         </div>
       </div>

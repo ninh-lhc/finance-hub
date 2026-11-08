@@ -15,8 +15,10 @@ import {
   shouldRenameWallet,
   shouldRenameCategory,
   hasCategoryNameConflict,
+  hasWalletNameConflict,
   removeCategoryAtIndex,
   canDeleteCategory,
+  canRenameOpeningBalanceCategory,
 } from './walletCategoryEntities.js';
 
 describe('isWalletFormReady', () => {
@@ -45,6 +47,59 @@ describe('hasCategoryNameConflict', () => {
       cleanName: 'Lương',
       editingId: 0,
     })).toBe(false);
+  });
+});
+
+describe('hasWalletNameConflict', () => {
+  const wallets = ['Tiền mặt', 'Agribank'];
+
+  it('blocks a second wallet with the same name', () => {
+    expect(hasWalletNameConflict({ wallets, cleanName: 'Agribank', editingId: null })).toBe(true);
+  });
+
+  it('allows keeping the wallet currently being renamed', () => {
+    expect(hasWalletNameConflict({ wallets, cleanName: 'Agribank', editingId: 1 })).toBe(false);
+  });
+
+  it('ignores a blank name', () => {
+    expect(hasWalletNameConflict({ wallets, cleanName: '', editingId: null })).toBe(false);
+  });
+});
+
+describe('canRenameOpeningBalanceCategory', () => {
+  const categories = { INCOME: ['Lương', 'Số dư đầu kỳ'], EXPENSE: ['Ăn uống'] };
+
+  it('blocks renaming the opening-balance category', () => {
+    expect(canRenameOpeningBalanceCategory({
+      categories,
+      categoryType: 'INCOME',
+      editingId: 1,
+      cleanName: 'Vốn đầu kỳ',
+    })).toBe(false);
+  });
+
+  it('allows saving the opening-balance category under the same name', () => {
+    expect(canRenameOpeningBalanceCategory({
+      categories,
+      categoryType: 'INCOME',
+      editingId: 1,
+      cleanName: 'Số dư đầu kỳ',
+    })).toBe(true);
+  });
+
+  it('allows renaming any other category', () => {
+    expect(canRenameOpeningBalanceCategory({
+      categories,
+      categoryType: 'INCOME',
+      editingId: 0,
+      cleanName: 'Lương tháng',
+    })).toBe(true);
+    expect(canRenameOpeningBalanceCategory({
+      categories,
+      categoryType: 'INCOME',
+      editingId: null,
+      cleanName: 'Thưởng',
+    })).toBe(true);
   });
 });
 

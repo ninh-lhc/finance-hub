@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getDocs } from 'firebase/firestore';
 
 const COMPARISON_TABS = new Set(['dashboard', 'transactions', 'annual']);
@@ -18,15 +18,20 @@ export default function useAnnualTransactions({
   const [isFetchingAnnual, setIsFetchingAnnual] = useState(false);
   const [loadedKey, setLoadedKey] = useState(null);
   const [previousYearKey, setPreviousYearKey] = useState(null);
+  const loadedViewRef = useRef(null);
 
   useEffect(() => {
     if (!user || !COMPARISON_TABS.has(activeTab)) return;
     let isMounted = true;
     const requestKey = `${selectedYear}:${selectedMonth}`;
+    const viewKey = `${user.uid}:${syncCode || ''}:${requestKey}`;
 
     const fetchAnnualData = async () => {
-      setIsFetchingAnnual(true);
-      setPreviousYearKey(null);
+      const keepCurrentChart = loadedViewRef.current === viewKey;
+      if (!keepCurrentChart) {
+        setIsFetchingAnnual(true);
+        setPreviousYearKey(null);
+      }
       const allYearTx = [];
       let boundaryTx = [];
       let previousYearTx = [];
@@ -66,6 +71,7 @@ export default function useAnnualTransactions({
           setAnnualTransactions(allYearTx);
           setPreviousBoundaryTransactions(boundaryTx);
           setPreviousYearTransactions(includePreviousYear ? previousYearTx : []);
+          loadedViewRef.current = viewKey;
           setLoadedKey(requestKey);
           setPreviousYearKey(includePreviousYear ? String(selectedYear) : null);
           setIsFetchingAnnual(false);

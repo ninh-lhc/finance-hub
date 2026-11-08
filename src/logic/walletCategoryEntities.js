@@ -74,12 +74,24 @@ export function shouldRenameCategory({ oldName, cleanName }) {
   return oldName !== cleanName;
 }
 
+const OPENING_BALANCE_CATEGORY = 'Số dư đầu kỳ';
+
 export function hasCategoryNameConflict({ categories, categoryType, cleanName, editingId }) {
   const list = categories?.[categoryType] || [];
   return list.some((name, index) => name === cleanName && index !== editingId);
 }
 
-const OPENING_BALANCE_CATEGORY = 'Số dư đầu kỳ';
+export function hasWalletNameConflict({ wallets, cleanName, editingId }) {
+  if (!cleanName) return false;
+  return (wallets || []).some((name, index) => name === cleanName && index !== editingId);
+}
+
+export function canRenameOpeningBalanceCategory({ categories, categoryType, editingId, cleanName }) {
+  if (editingId === null || editingId === undefined) return true;
+  const oldName = getCategoryNameAtIndex({ categories, categoryType, editingId });
+  if (oldName !== OPENING_BALANCE_CATEGORY) return true;
+  return cleanName === OPENING_BALANCE_CATEGORY;
+}
 
 export function removeCategoryAtIndex({ categories, categoryType, index }) {
   const list = categories?.[categoryType] || [];

@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useMemo, useRef } from 'react';
 import { 
   collection, addDoc, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, writeBatch, increment
 } from 'firebase/firestore';
@@ -47,7 +47,7 @@ import {
   deleteBudgetFromFirestore,
   deleteGoalFromFirestore,
 } from './services/finance/planningService.js';
-import { isWalletFormReady, isCategoryFormReady, hasCategoryNameConflict, normalizeCategoryName, canDeleteCategory, canDeleteWallet } from './logic/walletCategoryEntities.js';
+import { isCategoryFormReady, hasCategoryNameConflict, hasWalletNameConflict, normalizeCategoryName, normalizeWalletName, canDeleteCategory, canDeleteWallet, canRenameOpeningBalanceCategory } from './logic/walletCategoryEntities.js';
 import {
   saveWalletToFirestore,
   saveCategoryToFirestore,
@@ -93,6 +93,8 @@ export default function App() {
   const [modalType, setModalType] = useState('TRANSACTION');
   const [showBalance, setShowBalance] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSavingTransaction, setIsSavingTransaction] = useState(false);
+  const saveTransactionLock = useRef(false);
   const [activeSettingTab, setActiveSettingTab] = useState('sync');
   
   const [syncCode, setSyncCode] = useState(localStorage.getItem('finance_hub_sync_code') || '');
@@ -390,7 +392,7 @@ export default function App() {
         });
         showToast('Đã nạp dữ liệu mẫu 12 tháng năm 2025!', 'success');
         setSelectedYear(2025);
-        if (activeTab === 'annual') setAnnualRefreshTick(v => v + 1);
+        setAnnualRefreshTick(v => v + 1);
       } catch (e) {
         console.error(e);
         showToast('Lỗi khi nạp dữ liệu', 'error');
@@ -413,7 +415,7 @@ export default function App() {
               return;
           }
           showToast(`Đã xóa sạch ${result.deletedCount} dữ liệu mẫu!`, 'success');
-          if (activeTab === 'annual') setAnnualRefreshTick(v => v + 1);
+          setAnnualRefreshTick(v => v + 1);
       } catch (error) {
           console.error(error);
           showToast('Lỗi khi dọn dẹp dữ liệu mẫu!', 'error');
@@ -422,7 +424,7 @@ export default function App() {
     },
 
     saveTransaction: async () => {
-      if (!user) return;
+      if (!user || saveTransactionLock.current) return;
       let transferGoalOut = { goalId: '', goalDelta: 0 };
       let transferGoalIn = { goalId: '', goalDelta: 0 };
       if (modalType === 'TRANSACTION') {
@@ -456,6 +458,9 @@ export default function App() {
           }
       }
 
+      saveTransactionLock.current = true;
+      setIsSavingTransaction(true);
+      try {
       const colName = modalType === 'TRANSACTION' ? 'transactions' : modalType === 'GOAL' ? 'goals' : 'budgets';
       let payload = { ...formData, amount: Number(formData.amount || 0), target: Number(formData.target || 0), isSample: false };
       
@@ -495,7 +500,7 @@ export default function App() {
               });
               handleCloseModal();
               showToast('Đã luân chuyển tiền thành công!', 'success');
-              if (activeTab === 'annual') setAnnualRefreshTick(v => v + 1); 
+              setAnnualRefreshTick(v => v + 1); 
               return;
           }
           
@@ -515,7 +520,14 @@ export default function App() {
       
       showToast('Đã lưu thành công!', 'success');
       handleCloseModal();
-      if (activeTab === 'annual') setAnnualRefreshTick(v => v + 1);
+      setAnnualRefreshTick(v => v + 1);
+      } catch (error) {
+          console.error(error);
+          showToast('Lỗi khi lưu giao dịch!', 'error');
+      } finally {
+          saveTransactionLock.current = false;
+          setIsSavingTransaction(false);
+      }
     },
     
     deleteItem: async (col, id, txObj) => {
@@ -548,7 +560,7 @@ export default function App() {
              } else {
                  showToast('Đã xóa dữ liệu', 'success');
              }
-             if (activeTab === 'annual') setAnnualRefreshTick(v => v + 1);
+             setAnnualRefreshTick(v => v + 1);
           } else if (col === 'budgets') {
               await deleteBudgetFromFirestore({ getDocRef, id });
               showToast('Đã xóa dữ liệu', 'success');
@@ -698,7 +710,7 @@ export default function App() {
             }
 
             showToast(`Đã nhập thành công ${validCount} giao dịch!`, 'success');
-            if (activeTab === 'annual') setAnnualRefreshTick(v => v + 1);
+            setAnnualRefreshTick(v => v + 1);
         } catch (err) {
             console.error(err);
             showToast('Lỗi đọc file: Vui lòng tải Mẫu và điền đúng định dạng!', 'error');
@@ -727,7 +739,12 @@ export default function App() {
   };
 
   const handleSaveWallet = async () => {
-     if (!isWalletFormReady(settingsForm)) return;
+     const cleanName = normalizeWalletName(settingsForm.walletName);
+     if (!cleanName) return;
+     if (hasWalletNameConflict({ wallets, cleanName, editingId })) {
+       showToast('Ví này đã có.', 'warning');
+       return;
+     }
      const result = await saveWalletToFirestore({
        getCollectionRef,
        getDocRef,
@@ -770,6 +787,16 @@ export default function App() {
   const handleSaveCategory = async () => {
      if (!isCategoryFormReady(settingsForm)) return;
      const cleanName = normalizeCategoryName(settingsForm.categoryName);
+     if (!cleanName) return;
+     if (!canRenameOpeningBalanceCategory({
+       categories,
+       categoryType: settingsForm.categoryType,
+       editingId,
+       cleanName,
+     })) {
+       showToast('Không đổi tên danh mục Số dư đầu kỳ.', 'warning');
+       return;
+     }
      if (hasCategoryNameConflict({
        categories,
        categoryType: settingsForm.categoryType,
@@ -989,6 +1016,7 @@ export default function App() {
               setUseLinkedWallet={setUseLinkedWallet}
               handleCloseModal={handleCloseModal}
               onSaveTransaction={dbActions.saveTransaction}
+              isSavingTransaction={isSavingTransaction}
               goals={goals}
               walletBalances={walletBalances}
             />
