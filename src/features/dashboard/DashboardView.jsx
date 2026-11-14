@@ -38,14 +38,19 @@ function shownMoney(show, amount, compact = false) {
   return compact ? compactVnd(amount) : utils.formatVND(amount);
 }
 
+function signedCompact(amount) {
+  const text = compactVnd(amount);
+  return amount > 0 ? `+${text}` : text;
+}
+
 function deltaPhrase(delta, compact = false) {
-  if (!delta || delta.percent == null) {
-    if (compact) return delta?.amount > 0 ? 'Mới' : '—';
-    return delta?.amount > 0 ? 'Mới so với tháng trước' : 'Chưa có tháng trước';
-  }
+  if (!delta) return compact ? '…' : 'Đang đối chiếu';
+  if (!delta.amount) return compact ? '0%' : 'Bằng tháng trước';
+  const amountText = signedCompact(delta.amount);
+  if (delta.percent == null) return compact ? amountText : `${amountText} so với tháng trước`;
   const rounded = Math.round(delta.percent);
   const sign = rounded > 0 ? '+' : '';
-  return compact ? `${sign}${rounded}%` : `${sign}${rounded}% so với tháng trước`;
+  return compact ? `${sign}${rounded}%` : `${sign}${rounded}% · ${amountText} so với tháng trước`;
 }
 
 function formatAxis(amount) {
@@ -405,6 +410,11 @@ export default function DashboardView(props) {
   };
   const incomeDetail = monthComparison?.ready ? deltaPhrase(monthComparison.incomeDelta) : 'Đang đối chiếu';
   const expenseDetail = monthComparison?.ready ? deltaPhrase(monthComparison.expenseDelta) : 'Đang đối chiếu';
+  const surplusDetail = monthComparison?.ready
+    ? `Tiết kiệm ${saveRate.toFixed(0)}% · ${deltaPhrase(monthComparison.surplusDelta)}`
+    : `Tỷ lệ tiết kiệm ${saveRate.toFixed(0)}%`;
+  const goalProgress = logic.priorityGoal ? utils.calculateProgress(logic.priorityGoal.amount, logic.priorityGoal.target) : 0;
+  const goalDone = Boolean(logic.priorityGoal) && goalProgress >= 100;
   const fieldClass = 'bg-transparent text-xs font-black text-[#1B2559] outline-none cursor-pointer uppercase tracking-widest';
 
   return (
@@ -473,16 +483,16 @@ export default function DashboardView(props) {
           shortLabel="Tích lũy"
           amount={utils.formatVND(logic.income - logic.expense)}
           compact={compactVnd(logic.income - logic.expense)}
-          detail={`Tỷ lệ tiết kiệm ${saveRate.toFixed(0)}%`}
-          shortDetail={`${saveRate.toFixed(0)}%`}
+          detail={surplusDetail}
+          shortDetail={monthComparison?.ready ? deltaPhrase(monthComparison.surplusDelta, true) : `${saveRate.toFixed(0)}%`}
           icon={<Landmark size={18} className="text-white/90 shrink-0" />}
           onClick={openReport}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="min-w-0 h-full">
-          <div className="bg-[#111C44] rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 text-white shadow-xl border border-white/5 h-full flex flex-col">
+      <div className={goalDone ? 'space-y-4' : 'grid grid-cols-1 lg:grid-cols-2 gap-6'}>
+        <div className={goalDone ? 'min-w-0' : 'min-w-0 h-full'}>
+          <div className={`bg-[#111C44] rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 text-white shadow-xl border border-white/5 flex flex-col ${goalDone ? '' : 'h-full'}`}>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-[14px] flex items-center justify-center shadow-lg shrink-0" style={{ background: advisor.fill }}><Zap size={20} fill="white" /></div>
@@ -531,7 +541,23 @@ export default function DashboardView(props) {
           </div>
         </div>
 
-        {logic.priorityGoal ? (
+        {logic.priorityGoal && goalDone ? (
+            <button type="button" onClick={openGoalSettings} className="w-full bg-white rounded-[24px] px-5 py-4 shadow-sm border border-gray-100 flex items-center gap-4 text-left hover:shadow-md transition-all min-w-0">
+              <div className="w-10 h-10 rounded-2xl bg-[#E6FDF9] flex items-center justify-center shrink-0 border border-[#05CD99]/20">
+                <Target size={20} className="text-[#05CD99]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-black text-[#05CD99] uppercase tracking-[0.2em]">Đã đủ mục tiêu</p>
+                <p className="text-sm font-black text-[#1B2559] truncate mt-0.5">
+                  {logic.priorityGoal.name}{logic.priorityGoal.wallet ? ` · ${logic.priorityGoal.wallet}` : ''}
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-sm font-black text-[#1B2559] tabular-nums">{shownMoney(showBalance, logic.priorityGoal.amount)}</p>
+                <p className="text-[10px] font-black text-[#05CD99] mt-0.5">100%</p>
+              </div>
+            </button>
+          ) : logic.priorityGoal ? (
             <div onClick={openGoalSettings} className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-7 shadow-sm border border-gray-100 w-full h-full flex flex-col justify-between group cursor-pointer hover:shadow-md transition-all min-w-0">
               <div>
                 <div className="flex justify-between items-start mb-4">
