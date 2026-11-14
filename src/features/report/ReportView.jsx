@@ -172,18 +172,6 @@ export default function ReportView({
         </div>
       </div>
 
-      <BudgetSnapshot
-        key={`${selectedYear}-${selectedMonth}`}
-        budgets={budgets}
-        expenseCategories={report?.expenseCategories || []}
-        samePeriodReady={Boolean(report?.samePeriodReady)}
-        ready={Boolean(report?.ready)}
-        monthLabel={`Tháng ${selectedMonth + 1}/${selectedYear}`}
-        previousLabel={previousLabel || 'Tháng trước'}
-        onOpenCategory={(name) => onOpenLedger('EXPENSE', name)}
-        onOpenBudgets={onOpenBudgets}
-      />
-
       <PeriodOverview
         key={selectedYear}
         transactions={yearTransactions}
@@ -192,6 +180,19 @@ export default function ReportView({
         selectedMonth={selectedMonth}
         ready={Boolean(report?.ready)}
         handleEditTransaction={handleEditTransaction}
+        afterStats={(
+          <BudgetSnapshot
+            key={`${selectedYear}-${selectedMonth}`}
+            budgets={budgets}
+            expenseCategories={report?.expenseCategories || []}
+            samePeriodReady={Boolean(report?.samePeriodReady)}
+            ready={Boolean(report?.ready)}
+            monthLabel={`Tháng ${selectedMonth + 1}/${selectedYear}`}
+            previousLabel={previousLabel || 'Tháng trước'}
+            onOpenCategory={(name) => onOpenLedger('EXPENSE', name)}
+            onOpenBudgets={onOpenBudgets}
+          />
+        )}
       />
 
       {report?.ready && (

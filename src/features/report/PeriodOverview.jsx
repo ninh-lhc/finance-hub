@@ -350,6 +350,7 @@ export default function PeriodOverview({
   selectedMonth,
   ready,
   handleEditTransaction,
+  afterStats = null,
 }) {
   const [filter, setFilter] = useState({
     preset: 'year',
@@ -423,6 +424,8 @@ export default function PeriodOverview({
             <StatCard label="Chênh lệch" value={utils.formatVND(period.surplus)} detail={`Tỷ lệ tiết kiệm ${(period.savingsRate * 100).toFixed(1)}%`} toneClass="tone-surplus" />
             <StatCard label="Chi trung bình / tháng" value={utils.formatVND(period.averageMonthlyExpense)} detail={`${utils.formatDisplayDate(period.from)} – ${utils.formatDisplayDate(period.to)} (${period.dayCount} ngày)`} toneClass="tone-average" />
           </div>
+
+          {afterStats}
 
           <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6">
             <h3 className="text-base font-semibold text-slate-800 mb-2">Thu chi theo tháng</h3>
