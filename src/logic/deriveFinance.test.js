@@ -292,6 +292,27 @@ describe('deriveFinanceLogic', () => {
       expect(result.weekInsight.previousTotal).toBe(40);
       expect(result.weekInsight.topCategories[0].name).toBe('Ăn uống');
     });
+
+    it('lists counted income beside the day without adding it to the expense total', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(FIXED_NOW);
+
+      const salary = tx({ id: 'luong', type: 'INCOME', category: 'Lương', amount: 500, date: '2026-06-15', note: 'lương' });
+      const result = deriveFinanceLogic(createBaseInput({
+        transactions: [
+          tx({ id: 'com', type: 'EXPENSE', category: 'Ăn uống', amount: 100, date: '2026-06-15', note: 'cơm' }),
+          salary,
+          tx({ id: 'xfer-in', type: 'INCOME', category: 'Chuyển khoản đến', amount: 900, date: '2026-06-15' }),
+          tx({ id: 'open', type: 'INCOME', category: 'Số dư đầu kỳ', amount: 800, date: '2026-06-15' }),
+        ],
+        annualTransactions: [salary],
+      }));
+
+      const today = result.weeklyExpenses.at(-1);
+      expect(today.total).toBe(100);
+      expect(today.incomes).toHaveLength(1);
+      expect(today.incomes[0].note).toBe('lương');
+    });
   });
 });
 

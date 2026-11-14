@@ -210,13 +210,23 @@ function dayCategory(items) {
   return top ? top[0] : '';
 }
 
+function sortByAmount(items) {
+  return [...(items || [])].sort((left, right) => Number(right.amount || 0) - Number(left.amount || 0));
+}
+
 function WeekPanel({ logic, selectedMonth, activeDay, setActiveDay, onEdit }) {
+  const [openListKey, setOpenListKey] = useState(null);
   const days = logic.weeklyExpenses || [];
   const insight = logic.weekInsight || { previousTotal: null, topCategories: [], peakLabel: '', peakTotal: 0 };
   const currentTotal = days.reduce((sum, day) => sum + day.total, 0);
   const selectedIndex = Math.min(activeDay ?? Math.max(days.length - 1, 0), Math.max(days.length - 1, 0));
   const selected = days[selectedIndex];
-  const selectedItems = [...(selected?.items || [])].sort((left, right) => Number(right.amount || 0) - Number(left.amount || 0));
+  const selectedItems = sortByAmount(selected?.items);
+  const selectedIncomes = sortByAmount(selected?.incomes);
+  const dayRows = [...selectedItems, ...selectedIncomes];
+  const listKey = `${selectedMonth}:${selected?.dateStr || selected?.label || ''}`;
+  const listOpen = openListKey === listKey;
+  const visibleRows = listOpen ? dayRows : dayRows.slice(0, 3);
   const compare = weekCompareText(currentTotal, insight.previousTotal);
   const summary = [
     insight.peakTotal > 0 ? `Cao nhất ${insight.peakLabel} · ${compactVnd(insight.peakTotal)}` : '',
@@ -271,20 +281,32 @@ function WeekPanel({ logic, selectedMonth, activeDay, setActiveDay, onEdit }) {
               <p className="text-sm font-semibold">{selected.label}{dayCategory(selectedItems) ? ` · ${dayCategory(selectedItems)}` : ''}</p>
               <p className="text-sm font-semibold text-[#FF938A] tabular-nums">{utils.formatVND(selected.total)}</p>
             </div>
-            {selectedItems.length === 0 ? (
-              <p className="text-xs text-gray-400 mt-2">Không có khoản chi.</p>
+            {dayRows.length === 0 ? (
+              <p className="text-xs text-gray-400 mt-2">Không có khoản thu chi.</p>
             ) : (
-              <div className="mt-2 space-y-1">
-                {selectedItems.slice(0, 3).map((item) => (
-                  <button key={item.id || `${item.date}-${item.amount}-${item.note}`} type="button" onClick={() => onEdit(item)} className="w-full flex items-center justify-between gap-3 text-left bg-transparent border-0 min-h-11 px-0">
-                    <span className="min-w-0">
-                      <span className="block text-sm text-white truncate">{item.note || item.category}</span>
-                      <span className="block text-[11px] text-gray-400 truncate">{item.linkedWallet || item.wallet}</span>
-                    </span>
-                    <span className="text-sm tabular-nums shrink-0">-{utils.formatVND(item.amount)}</span>
+              <div className="mt-2 divide-y divide-white/10">
+                {visibleRows.map((item, index) => {
+                  const income = item.type === 'INCOME';
+                  const previous = visibleRows[index - 1];
+                  const showHeading = selectedIncomes.length > 0 && selectedItems.length > 0 && (!previous || previous.type !== item.type);
+                  return (
+                    <div key={item.id || `${item.type}-${item.date}-${item.amount}-${item.note}`}>
+                      {showHeading && <p className="pt-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">{income ? 'Thu' : 'Chi'}</p>}
+                      <button type="button" onClick={() => onEdit(item)} className="w-full flex items-center justify-between gap-3 text-left bg-transparent border-0 min-h-11 px-2 -mx-2 rounded-xl hover:bg-white/10">
+                        <span className="min-w-0">
+                          <span className="block text-sm text-white truncate">{item.note || item.category}</span>
+                          <span className="block text-[11px] text-gray-400 truncate">{item.linkedWallet || item.wallet}</span>
+                        </span>
+                        <span className={`text-sm tabular-nums shrink-0 ${income ? 'text-[#05CD99]' : 'text-[#FF938A]'}`}>{income ? '+' : '-'}{utils.formatVND(item.amount)}</span>
+                      </button>
+                    </div>
+                  );
+                })}
+                {dayRows.length > 3 && (
+                  <button type="button" onClick={() => setOpenListKey(listOpen ? null : listKey)} className="w-full min-h-11 text-left text-[11px] text-gray-300 bg-transparent border-0 hover:text-white">
+                    {listOpen ? 'Thu gọn' : `và ${dayRows.length - 3} khoản nữa`}
                   </button>
-                ))}
-                {selectedItems.length > 3 && <p className="text-[11px] text-gray-400">và {selectedItems.length - 3} khoản nữa</p>}
+                )}
               </div>
             )}
           </div>

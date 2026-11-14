@@ -1,13 +1,10 @@
 import utils from '../utils/format.js';
 import { THEME, CHART_COLORS } from '../constants/theme.js';
+import { isCountedExpense, isCountedIncome } from './monthComparison.js';
 import { locksForWallet } from './planningEntities.js';
 
 function weekExpenseIdentity(transaction) {
   return transaction.id || `${transaction.date}|${transaction.amount}|${transaction.category}|${transaction.note || ''}`;
-}
-
-function isCountedWeekExpense(transaction) {
-  return Boolean(transaction) && transaction.type === 'EXPENSE' && transaction.category !== 'Chuyển khoản đi';
 }
 
 function shiftDate(dateStr, days) {
@@ -40,7 +37,7 @@ function buildWeekInsight({ weeklyExpenses, isCurrentMonthView, sources }) {
     previousTotal = 0;
     sources.forEach((list) => {
       (list || []).forEach((transaction) => {
-        if (!isCountedWeekExpense(transaction)) return;
+        if (!isCountedExpense(transaction)) return;
         const identity = weekExpenseIdentity(transaction);
         if (seen.has(identity)) return;
         seen.add(identity);
@@ -151,12 +148,13 @@ export const deriveFinanceLogic = ({
           const dateStr = `${d.getFullYear()}-${m}-${dayStr}`;
           let dayName = utils.getDayOfWeekVN(dateStr);
           if (i === 6) dayName = 'Hôm nay';
-          return { dateStr, label: dayName, total: 0, items: [] };
+          return { dateStr, label: dayName, total: 0, items: [], incomes: [] };
       });
 
       const countedExpenseIds = new Set();
+      const countedIncomeIds = new Set();
       const addWeekExpense = (transaction) => {
-          if (!isCountedWeekExpense(transaction)) return;
+          if (!isCountedExpense(transaction)) return;
           const identity = weekExpenseIdentity(transaction);
           if (countedExpenseIds.has(identity)) return;
           countedExpenseIds.add(identity);
@@ -165,24 +163,40 @@ export const deriveFinanceLogic = ({
           dayObj.total += Number(transaction.amount || 0);
           dayObj.items.push(transaction);
       };
+      const addWeekIncome = (transaction) => {
+          if (!isCountedIncome(transaction)) return;
+          const identity = weekExpenseIdentity(transaction);
+          if (countedIncomeIds.has(identity)) return;
+          countedIncomeIds.add(identity);
+          const dayObj = weeklyExpenses.find(d => d.dateStr === transaction.date);
+          if (!dayObj) return;
+          dayObj.incomes.push(transaction);
+      };
       monthData.forEach(addWeekExpense);
+      monthData.forEach(addWeekIncome);
       (annualTransactions || []).forEach(addWeekExpense);
+      (annualTransactions || []).forEach(addWeekIncome);
       (boundaryTransactions || []).forEach(addWeekExpense);
+      (boundaryTransactions || []).forEach(addWeekIncome);
   } else {
       // NẾU LÀ THÁNG TRONG QUÁ KHỨ: Hiển thị tổng hợp theo 4 Tuần
       weeklyExpenses = [
-          { label: 'Tuần 1', start: 1, end: 7, total: 0, items: [] },
-          { label: 'Tuần 2', start: 8, end: 14, total: 0, items: [] },
-          { label: 'Tuần 3', start: 15, end: 21, total: 0, items: [] },
-          { label: 'Tuần 4', start: 22, end: 31, total: 0, items: [] }
+          { label: 'Tuần 1', start: 1, end: 7, total: 0, items: [], incomes: [] },
+          { label: 'Tuần 2', start: 8, end: 14, total: 0, items: [], incomes: [] },
+          { label: 'Tuần 3', start: 15, end: 21, total: 0, items: [], incomes: [] },
+          { label: 'Tuần 4', start: 22, end: 31, total: 0, items: [], incomes: [] }
       ];
 
       monthData.forEach(t => {
-          if (!isCountedWeekExpense(t) || !t.date) return;
+          if (!t.date) return;
           const day = parseInt(t.date.split('-')[2], 10);
           const bucket = day <= 7 ? weeklyExpenses[0] : day <= 14 ? weeklyExpenses[1] : day <= 21 ? weeklyExpenses[2] : weeklyExpenses[3];
-          bucket.total += Number(t.amount || 0);
-          bucket.items.push(t);
+          if (isCountedExpense(t)) {
+            bucket.total += Number(t.amount || 0);
+            bucket.items.push(t);
+          } else if (isCountedIncome(t)) {
+            bucket.incomes.push(t);
+          }
       });
   }
 
