@@ -173,6 +173,7 @@ export default function ReportView({
       </div>
 
       <BudgetSnapshot
+        key={`${selectedYear}-${selectedMonth}`}
         budgets={budgets}
         expenseCategories={report?.expenseCategories || []}
         samePeriodReady={Boolean(report?.samePeriodReady)}

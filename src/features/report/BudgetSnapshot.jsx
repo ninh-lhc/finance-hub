@@ -1,4 +1,5 @@
-import { Target } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, Target } from 'lucide-react';
 import utils from '../../utils/format.js';
 import { buildBudgetSnapshot } from '../../logic/budgetSnapshot.js';
 
@@ -105,21 +106,45 @@ function DeltaLine({ delta, label }) {
   );
 }
 
-function TargetCard({ item, previousLabel, onOpen }) {
+function Fold({ open, onToggle, name, badge, badgeTone, summary, bar, children }) {
+  return (
+    <div className={`bg-[#F8F9FA] rounded-2xl border ${open ? 'border-[#4318FF]' : 'border-slate-100'}`}>
+      <button type="button" aria-expanded={open} onClick={onToggle} className="w-full text-left p-4">
+        <div className="flex items-center gap-3">
+          <span className="w-1.5 h-9 rounded-full shrink-0" style={{ background: badgeTone }} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-[#1B2559] truncate">{name}</p>
+              <span className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white" style={{ background: badgeTone }}>{badge}</span>
+            </div>
+            <p className="text-sm font-semibold text-[#1B2559] tabular-nums mt-0.5 truncate">{summary}</p>
+          </div>
+          <ChevronDown size={16} className={`text-slate-500 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </div>
+        {bar}
+      </button>
+      {open && <div className="px-4 pb-4">{children}</div>}
+    </div>
+  );
+}
+
+function TargetCard({ item, previousLabel, open, onToggle, onOpen }) {
   const status = STATUS[item.status];
   return (
-    <button type="button" onClick={() => onOpen(item.name)} className="w-full text-left bg-[#F8F9FA] rounded-2xl border border-slate-100 p-4 hover:border-[#4318FF]">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-semibold text-[#1B2559] truncate">{item.name}</p>
-        <span className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white" style={{ background: status.tone }}>{status.label}</span>
-      </div>
-      <div className="mt-3 rounded-xl px-3 py-3 text-white" style={{ background: status.tone }}>
-        <p className="text-xl font-semibold tabular-nums">{status.detail(item)}</p>
-        <p className="text-xs text-white mt-1">Đã chi {utils.formatVND(item.spent)} / {utils.formatVND(item.limit)}</p>
-      </div>
-      <div className="mt-3 h-2.5 rounded-full bg-[#F4F7FE] overflow-hidden">
-        <div className="h-full rounded-full" style={{ width: `${item.spent > 0 ? Math.max(Math.min(item.percent, 100), 4) : 0}%`, background: status.tone }} />
-      </div>
+    <Fold
+      open={open}
+      onToggle={onToggle}
+      name={item.name}
+      badge={status.label}
+      badgeTone={status.tone}
+      summary={status.detail(item)}
+      bar={(
+        <div className="mt-3 h-1.5 rounded-full bg-[#F4F7FE] overflow-hidden">
+          <div className="h-full rounded-full" style={{ width: `${item.spent > 0 ? Math.max(Math.min(item.percent, 100), 4) : 0}%`, background: status.tone }} />
+        </div>
+      )}
+    >
+      <p className="text-xs text-slate-500">Đã chi {utils.formatVND(item.spent)} / {utils.formatVND(item.limit)}</p>
       <CompareColumns
         current={item.spent}
         previous={item.previous}
@@ -131,19 +156,22 @@ function TargetCard({ item, previousLabel, onOpen }) {
         <DeltaLine delta={item.previousDelta} label={previousLabel} />
         <DeltaLine delta={item.samePeriodDelta} label="Cùng kỳ" />
       </div>
-    </button>
+      <button type="button" onClick={() => onOpen(item.name)} className="mt-3 text-xs font-semibold text-[#4318FF]">Mở sổ giao dịch</button>
+    </Fold>
   );
 }
 
-function OpenCard({ item, previousLabel, onOpen }) {
+function OpenCard({ item, previousLabel, open, onToggle, onOpen }) {
   return (
-    <button type="button" onClick={() => onOpen(item.name)} className="w-full text-left bg-[#F8F9FA] rounded-2xl border border-slate-100 p-4 hover:border-[#4318FF]">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-semibold text-[#1B2559] truncate">{item.name}</p>
-        <span className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold text-white" style={{ background: '#31457A' }}>Chưa đặt</span>
-      </div>
-      <p className="text-xl font-semibold text-[#1B2559] mt-3 tabular-nums">{utils.formatVND(item.spent)}</p>
-      <p className="text-xs text-slate-500 mt-1">Tháng này, chưa có hạn mức để biết còn hay hết.</p>
+    <Fold
+      open={open}
+      onToggle={onToggle}
+      name={item.name}
+      badge="Chưa đặt"
+      badgeTone="#31457A"
+      summary={utils.formatVND(item.spent)}
+    >
+      <p className="text-xs text-slate-500">Tháng này chưa có hạn mức để biết còn hay hết.</p>
       <CompareColumns
         current={item.spent}
         previous={item.previous}
@@ -155,7 +183,8 @@ function OpenCard({ item, previousLabel, onOpen }) {
         <DeltaLine delta={item.previousDelta} label={previousLabel} />
         <DeltaLine delta={item.samePeriodDelta} label="Cùng kỳ" />
       </div>
-    </button>
+      <button type="button" onClick={() => onOpen(item.name)} className="mt-3 text-xs font-semibold text-[#4318FF]">Mở sổ giao dịch</button>
+    </Fold>
   );
 }
 
@@ -172,6 +201,8 @@ export default function BudgetSnapshot({
   const snapshot = buildBudgetSnapshot({ budgets, expenseCategories, samePeriodReady });
   const { tracked, open, totals } = snapshot;
   const hasTargets = tracked.length > 0;
+  const [openKey, setOpenKey] = useState(null);
+  const toggle = (key) => setOpenKey((current) => (current === key ? null : key));
 
   return (
     <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6 space-y-5">
@@ -213,7 +244,14 @@ export default function BudgetSnapshot({
                 <h4 className="text-sm font-semibold text-[#1B2559] mb-3">Đã đặt mục tiêu</h4>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   {tracked.map((item) => (
-                    <TargetCard key={item.name} item={item} previousLabel={previousLabel} onOpen={onOpenCategory} />
+                    <TargetCard
+                      key={item.name}
+                      item={item}
+                      previousLabel={previousLabel}
+                      open={openKey === `target:${item.name}`}
+                      onToggle={() => toggle(`target:${item.name}`)}
+                      onOpen={onOpenCategory}
+                    />
                   ))}
                 </div>
               </div>
@@ -232,7 +270,14 @@ export default function BudgetSnapshot({
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {open.map((item) => (
-                  <OpenCard key={item.name} item={item} previousLabel={previousLabel} onOpen={onOpenCategory} />
+                  <OpenCard
+                    key={item.name}
+                    item={item}
+                    previousLabel={previousLabel}
+                    open={openKey === `open:${item.name}`}
+                    onToggle={() => toggle(`open:${item.name}`)}
+                    onOpen={onOpenCategory}
+                  />
                 ))}
               </div>
             )}
