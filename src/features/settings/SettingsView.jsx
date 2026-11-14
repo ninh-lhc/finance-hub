@@ -1,6 +1,6 @@
 import {
   Link2, Target, Wallet, List, PiggyBank, Loader2, Sparkles, Trash2, Cloud, Laptop, Smartphone,
-  Save, Plus, Edit2, RotateCcw, Landmark
+  Save, Plus, Edit2, RotateCcw, Landmark, Sun, Moon
 } from 'lucide-react';
 import GoogleUpgradeButton from '../../components/GoogleUpgradeButton.jsx';
 import DataSourceDiagnostics from './DataSourceDiagnostics.jsx';
@@ -38,6 +38,8 @@ export default function SettingsView(props) {
     handleDeleteCategory,
     handleSaveGoal,
     resetWalletBalance,
+    appearance,
+    setAppearance,
     dataSourceDiagnostics,
     legacyMigrationReadiness,
     legacyMigrationInspection,
@@ -49,13 +51,34 @@ export default function SettingsView(props) {
   return (
     <div className="flex flex-col lg:flex-row gap-6 animate-in fade-in">
       <div className="w-full lg:w-56 flex flex-row lg:flex-col gap-2 overflow-x-auto no-scrollbar pb-2 lg:pb-0">
-        {[{id: 'sync', icon: Link2, label: 'ĐỒNG BỘ'}, {id: 'budget', icon: Target, label: 'NGÂN SÁCH'}, {id: 'wallet', icon: Wallet, label: 'VÍ TIỀN'}, {id: 'category', icon: List, label: 'DANH MỤC'}, {id: 'goal', icon: PiggyBank, label: 'MỤC TIÊU'}].map(item => (
+        {[{id: 'sync', icon: Link2, label: 'ĐỒNG BỘ'}, {id: 'appearance', icon: Sun, label: 'GIAO DIỆN'}, {id: 'budget', icon: Target, label: 'NGÂN SÁCH'}, {id: 'wallet', icon: Wallet, label: 'VÍ TIỀN'}, {id: 'category', icon: List, label: 'DANH MỤC'}, {id: 'goal', icon: PiggyBank, label: 'MỤC TIÊU'}].map(item => (
           <button key={item.id} onClick={() => { setActiveSettingTab(item.id); cancelEdit(); }} className={`flex items-center justify-center lg:justify-start gap-3 px-5 py-4 rounded-2xl text-[10px] font-black tracking-widest transition-all whitespace-nowrap flex-shrink-0 ${activeSettingTab === item.id ? 'bg-[#4318FF] text-white shadow-xl scale-105' : 'bg-white text-[#A3AED0] hover:text-[#4318FF] border border-gray-50'}`}>
             <item.icon size={16}/>{item.label}
           </button>
         ))}
       </div>
       <div className="flex-1 bg-white rounded-[32px] p-6 lg:p-10 shadow-sm border border-gray-100 min-h-[500px]">
+        {activeSettingTab === 'appearance' && (
+          <div className="space-y-6 animate-in fade-in">
+            <div className="space-y-1">
+              <h3 className="text-base font-black uppercase tracking-widest text-[#1B2559]">Giao diện</h3>
+              <p className="text-[10px] text-gray-400 font-bold uppercase italic">Chọn nền sáng hoặc tối. Lựa chọn được giữ trên máy này.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <button type="button" onClick={() => setAppearance('light')} className={`rounded-2xl border p-5 text-left ${appearance === 'light' ? 'border-[#4318FF] bg-[#F4F7FE]' : 'border-gray-100 bg-white'}`}>
+                <Sun size={20} className="text-[#E3940A]" />
+                <p className="mt-3 text-sm font-black text-[#1B2559]">Sáng</p>
+                <p className="mt-1 text-xs text-gray-400">Nền xanh nhạt, thẻ trắng.</p>
+              </button>
+              <button type="button" onClick={() => setAppearance('dark')} className={`rounded-2xl border p-5 text-left ${appearance === 'dark' ? 'border-[#4318FF] bg-[#F4F7FE]' : 'border-gray-100 bg-white'}`}>
+                <Moon size={20} className="text-[#4318FF]" />
+                <p className="mt-3 text-sm font-black text-[#1B2559]">Tối</p>
+                <p className="mt-1 text-xs text-gray-400">Nền navy, chữ sáng, biểu đồ giữ màu.</p>
+              </button>
+            </div>
+          </div>
+        )}
+
         {activeSettingTab === 'sync' && (
           <div className="space-y-8 animate-in fade-in">
             <div className="space-y-1"><h3 className="text-base font-black uppercase tracking-widest text-[#1B2559]">Đồng bộ đa thiết bị</h3><p className="text-[10px] text-gray-400 font-bold uppercase italic">Dùng chung dữ liệu mà không cần tạo tài khoản mật khẩu</p></div>

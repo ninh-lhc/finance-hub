@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo, useRef } from 'react';
+﻿import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { 
   collection, addDoc, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, writeBatch, increment
 } from 'firebase/firestore';
@@ -16,6 +16,7 @@ import TransactionsView from './features/transactions/TransactionsView.jsx';
 import AnnualView from './features/annual/AnnualView.jsx';
 import ReportView from './features/report/ReportView.jsx';
 import SettingsView from './features/settings/SettingsView.jsx';
+import { applyAppearance, readAppearance } from './theme/appearance.js';
 import TransactionModal from './features/transactions/TransactionModal.jsx';
 import utils from './utils/format.js';
 import { deriveFinanceLogic, deriveTransactionView } from './logic/deriveFinance.js';
@@ -101,6 +102,7 @@ export default function App() {
   const [isSavingTransaction, setIsSavingTransaction] = useState(false);
   const saveTransactionLock = useRef(false);
   const [activeSettingTab, setActiveSettingTab] = useState('sync');
+  const [appearance, setAppearance] = useState(readAppearance);
   
   const [syncCode, setSyncCode] = useState(localStorage.getItem('finance_hub_sync_code') || '');
   const { getCollectionRef, getDocRef } = useFirestoreRefs({ user, syncCode });
@@ -918,11 +920,15 @@ export default function App() {
      );
   };
 
+  useEffect(() => {
+    applyAppearance(appearance);
+  }, [appearance]);
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Chào buổi sáng' : hour < 18 ? 'Chào buổi chiều' : 'Chào buổi tối';
 
   return (
-    <div className="min-h-screen bg-[#F4F7FE] text-[#2B3674] font-sans selection:bg-[#4318FF]/10 relative [-webkit-tap-highlight-color:transparent]">
+    <div className="app-shell min-h-screen bg-[#F4F7FE] text-[#2B3674] font-sans selection:bg-[#4318FF]/10 relative [-webkit-tap-highlight-color:transparent]">
       <style dangerouslySetInnerHTML={{__html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -1087,6 +1093,8 @@ export default function App() {
               handleDeleteCategory={handleDeleteCategory}
               handleSaveGoal={handleSaveGoal}
               resetWalletBalance={resetWalletBalance}
+              appearance={appearance}
+              setAppearance={setAppearance}
               dataSourceDiagnostics={dataSourceDiagnostics}
               legacyMigrationReadiness={legacyMigrationReadiness}
               legacyMigrationInspection={legacyMigrationInspection}

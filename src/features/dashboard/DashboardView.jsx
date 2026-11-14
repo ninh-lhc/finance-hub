@@ -120,7 +120,7 @@ function ColorStat({ tone, label, shortLabel, amount, compact, detail, shortDeta
     <button type="button" onClick={onClick} className={`relative overflow-hidden rounded-2xl p-3 sm:p-4 min-h-[112px] text-left text-white min-w-0 shadow-sm ${tone}`}>
       <span className="absolute -right-4 -top-6 h-20 w-20 rounded-full bg-white/15" />
       <span className="relative flex items-start justify-between gap-2">
-        <span className="text-[13px] font-semibold leading-5 text-white/90">
+        <span className="text-[13px] font-semibold leading-5 text-white">
           <span className="lg:hidden">{shortLabel}</span>
           <span className="hidden lg:inline">{label}</span>
         </span>
@@ -130,7 +130,7 @@ function ColorStat({ tone, label, shortLabel, amount, compact, detail, shortDeta
         <span className="lg:hidden">{compact}</span>
         <span className="hidden lg:inline">{amount}</span>
       </span>
-      <span className="relative mt-2 block text-[13px] leading-5 text-white/90">
+      <span className="relative mt-2 block text-[13px] leading-5 text-white">
         <span className="lg:hidden">{shortDetail}</span>
         <span className="hidden lg:inline">{detail}</span>
       </span>
@@ -221,7 +221,7 @@ function SixMonthChart({ months, ready }) {
             >
               <p className="text-xs font-semibold text-slate-800">{activeMonth.label}</p>
               <p className="text-[12px] mt-1" style={{ color: INCOME_COLOR }}>Thu: {utils.formatVND(activeMonth.income)}</p>
-              <p className="text-[12px]" style={{ color: EXPENSE_COLOR }}>Chi: {utils.formatVND(activeMonth.expense)}</p>
+              <p className="expense-ink text-[12px]" style={{ color: EXPENSE_COLOR }}>Chi: {utils.formatVND(activeMonth.expense)}</p>
             </div>
           )}
           <div data-legend className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-4 text-[13px] text-slate-600">
@@ -445,13 +445,13 @@ export default function DashboardView(props) {
         <div className="col-span-3 lg:col-span-1 relative overflow-hidden rounded-2xl bg-[#2563EB] p-4 min-h-[112px] text-white shadow-sm">
           <span className="absolute -right-4 -top-6 h-24 w-24 rounded-full bg-white/15" />
           <div className="relative flex items-center justify-between gap-2">
-            <p className="text-[13px] font-semibold text-white/90">Khả dụng chi tiêu</p>
-            <button type="button" onClick={() => setShowBalance(!showBalance)} className="min-w-11 min-h-11 -mr-2 inline-flex items-center justify-center text-white/80" aria-label={showBalance ? 'Ẩn số dư' : 'Hiện số dư'}>
+            <p className="text-[13px] font-semibold text-white">Khả dụng chi tiêu</p>
+            <button type="button" onClick={() => setShowBalance(!showBalance)} className="min-w-11 min-h-11 -mr-2 inline-flex items-center justify-center text-white" aria-label={showBalance ? 'Ẩn số dư' : 'Hiện số dư'}>
               <Eye size={16} />
             </button>
           </div>
           <p className="relative text-2xl sm:text-[28px] font-black tracking-tight break-all leading-tight">{shownMoney(showBalance, logic.spendableBal)}</p>
-          <p className="relative text-[13px] text-white/85 mt-2 leading-5">
+          <p className="relative text-[13px] text-white mt-2 leading-5">
             Thực tế {shownMoney(showBalance, logic.globalBal)} · Khóa quỹ {shownMoney(showBalance, logic.totalGoalsAmount)}
           </p>
         </div>
@@ -502,7 +502,7 @@ export default function DashboardView(props) {
             </div>
             <p className="text-sm text-white leading-relaxed font-medium mt-4">&quot;{generateDashboardAdvice()}&quot;</p>
             <div className="mt-auto pt-6">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/45">Còn lại trong tháng</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/75">Còn lại trong tháng</p>
               <p className="text-3xl font-black tabular-nums mt-1 tracking-tight" style={{ color: remaining >= 0 ? '#05CD99' : '#FF938A' }}>{compactVnd(remaining)}</p>
               {logic.income > 0 ? (
                 <p className="text-[13px] text-white/70 mt-2 leading-5">
@@ -517,9 +517,9 @@ export default function DashboardView(props) {
                     <div className="h-2 rounded-full bg-white/10 overflow-hidden">
                       <div className="h-full rounded-full" style={{ width: `${Math.min(spendRate, 100)}%`, background: advisor.fill }} />
                     </div>
-                    <span className="absolute -top-1 h-4 w-0.5 rounded-full bg-white" style={{ left: '80%' }} />
+                    <span className="absolute -top-1 h-4 w-0.5 rounded-full" style={{ left: '80%', background: '#fff' }} />
                   </div>
-                  <div className="flex justify-between mt-2 text-[10px] font-bold uppercase tracking-widest text-white/45">
+                  <div className="flex justify-between mt-2 text-[10px] font-bold uppercase tracking-widest text-white/75">
                     <span>Vạch trắng là ngưỡng 80%</span>
                     <span className="tabular-nums" style={{ color: advisor.color }}>{spendRate.toFixed(0)}%</span>
                   </div>
@@ -528,7 +528,7 @@ export default function DashboardView(props) {
               {topExpense && (
                 <button type="button" onClick={openTopExpense} className="mt-4 w-full min-h-11 text-left rounded-2xl bg-white/5 hover:bg-white/10 px-4 py-3 flex items-center justify-between gap-3">
                   <span className="min-w-0">
-                    <span className="block text-[10px] font-bold uppercase tracking-widest text-white/45">Khoản chi lớn nhất</span>
+                    <span className="block text-[10px] font-bold uppercase tracking-widest text-white/75">Khoản chi lớn nhất</span>
                     <span className="block text-sm font-black mt-1 truncate">{topExpense.name}</span>
                   </span>
                   <span className="inline-flex items-center gap-1 shrink-0 text-sm font-black text-[#FF938A] tabular-nums">

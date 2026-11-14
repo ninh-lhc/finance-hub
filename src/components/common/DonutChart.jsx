@@ -25,14 +25,14 @@ const DonutChart = ({ data, total, centerLabel, onItemClick, isDark = false }) =
                key={i}
                d={`M ${sX} ${sY} A 1 1 0 ${largeArc} 1 ${eX} ${eY} L 0 0`}
                fill={slice.color}
-               stroke={isDark ? '#1C244B' : '#FFFFFF'}
+               stroke="var(--card)"
                strokeWidth="0.045"
                strokeLinejoin="round"
                className={`transition-all duration-300 hover:opacity-75 ${onItemClick ? 'cursor-pointer drop-shadow-sm hover:drop-shadow-md' : ''}`}
                onClick={() => onItemClick && onItemClick(slice.name)}
             />;
           })}
-          <circle cx="0" cy="0" r="0.75" fill="white" />
+          <circle cx="0" cy="0" r="0.75" fill="var(--card)" />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center p-2">
           <span className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${isDark ? 'text-gray-300' : 'text-gray-400'}`}>{centerLabel}</span>

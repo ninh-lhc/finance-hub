@@ -10,7 +10,6 @@ import { buildPeriodReport } from '../../logic/periodReport.js';
 const INCOME_COLOR = '#16A34A';
 const EXPENSE_COLOR = '#DC2626';
 const SURPLUS_COLOR = '#2563EB';
-const AVERAGE_COLOR = '#7C3AED';
 
 function MarkIcon({ name }) {
   if (/nhà/i.test(name)) return <Home size={18} />;
@@ -87,12 +86,12 @@ function Mark({ name, color }) {
   );
 }
 
-function StatCard({ label, value, detail, accent }) {
+function StatCard({ label, value, detail, toneClass }) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm p-5 min-w-0" style={{ boxShadow: '0 1px 2px rgba(15,23,42,0.04)', border: '1px solid #EEF2F7', borderTop: `3px solid ${accent}` }}>
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="text-2xl font-semibold mt-2 break-words tabular-nums" style={{ color: accent }}>{value}</p>
-      <p className="text-xs text-slate-400 mt-2">{detail}</p>
+    <div className={`rounded-2xl shadow-sm p-5 min-w-0 text-white ${toneClass}`}>
+      <p className="text-sm text-white">{label}</p>
+      <p className="text-2xl font-semibold mt-2 break-words tabular-nums">{value}</p>
+      <p className="text-xs text-white mt-2">{detail}</p>
     </div>
   );
 }
@@ -419,10 +418,10 @@ export default function PeriodOverview({
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <StatCard label="Tổng thu" value={utils.formatVND(period.income)} detail={`${period.count} giao dịch`} accent={INCOME_COLOR} />
-            <StatCard label="Tổng chi" value={utils.formatVND(period.expense)} detail={`Trung bình ${utils.formatVND(period.averagePerDay)} / ngày`} accent={EXPENSE_COLOR} />
-            <StatCard label="Chênh lệch" value={utils.formatVND(period.surplus)} detail={`Tỷ lệ tiết kiệm ${(period.savingsRate * 100).toFixed(1)}%`} accent={SURPLUS_COLOR} />
-            <StatCard label="Chi trung bình / tháng" value={utils.formatVND(period.averageMonthlyExpense)} detail={`${utils.formatDisplayDate(period.from)} – ${utils.formatDisplayDate(period.to)} (${period.dayCount} ngày)`} accent={AVERAGE_COLOR} />
+            <StatCard label="Tổng thu" value={utils.formatVND(period.income)} detail={`${period.count} giao dịch`} toneClass="tone-income" />
+            <StatCard label="Tổng chi" value={utils.formatVND(period.expense)} detail={`Trung bình ${utils.formatVND(period.averagePerDay)} / ngày`} toneClass="tone-expense" />
+            <StatCard label="Chênh lệch" value={utils.formatVND(period.surplus)} detail={`Tỷ lệ tiết kiệm ${(period.savingsRate * 100).toFixed(1)}%`} toneClass="tone-surplus" />
+            <StatCard label="Chi trung bình / tháng" value={utils.formatVND(period.averageMonthlyExpense)} detail={`${utils.formatDisplayDate(period.from)} – ${utils.formatDisplayDate(period.to)} (${period.dayCount} ngày)`} toneClass="tone-average" />
           </div>
 
           <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6">
@@ -463,7 +462,7 @@ export default function PeriodOverview({
                         <p className="text-sm font-semibold text-slate-800 truncate">{item.category}</p>
                         <p className="text-xs text-slate-400 mt-0.5 truncate">{utils.formatDisplayDate(item.date)} · {item.wallet}{item.note ? ` · ${item.note}` : ''}</p>
                       </div>
-                      <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: EXPENSE_COLOR }}>-{utils.formatVND(item.amount)}</span>
+                      <span className="expense-ink text-sm font-semibold tabular-nums shrink-0" style={{ color: EXPENSE_COLOR }}>-{utils.formatVND(item.amount)}</span>
                     </button>
                   );
                 })}

@@ -140,21 +140,21 @@ export default function TransactionsView(props) {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                       <div className={`rounded-2xl px-4 py-4 text-left text-white bg-[#05CD99] shadow-sm ${filterType === 'INCOME' ? 'ring-2 ring-offset-2 ring-[#05CD99]' : ''}`}>
                         <button type="button" onClick={() => setFilterType('INCOME')} className="w-full text-left bg-transparent border-0 p-0 text-white">
-                          <p className="text-[11px] font-semibold text-white/80">Thu tháng này</p>
+                          <p className="text-[11px] font-semibold text-white">Thu tháng này</p>
                           <p className="text-xl font-black mt-1 tabular-nums">{utils.formatVND(monthComparison.income)}</p>
                         </button>
                         <p className="mt-2"><DeltaLabel light delta={monthComparison.incomeDelta} prefix={`so với T${monthComparison.previousMonth + 1}`} onClick={openPreviousMonth} /></p>
                       </div>
                       <div className={`rounded-2xl px-4 py-4 text-left text-white bg-[#EE5D50] shadow-sm ${filterType === 'EXPENSE' ? 'ring-2 ring-offset-2 ring-[#EE5D50]' : ''}`}>
                         <button type="button" onClick={() => setFilterType('EXPENSE')} className="w-full text-left bg-transparent border-0 p-0 text-white">
-                          <p className="text-[11px] font-semibold text-white/80">Chi tháng này</p>
+                          <p className="text-[11px] font-semibold text-white">Chi tháng này</p>
                           <p className="text-xl font-black mt-1 tabular-nums">{utils.formatVND(monthComparison.expense)}</p>
                         </button>
                         <p className="mt-2"><DeltaLabel light invert delta={monthComparison.expenseDelta} prefix={`so với T${monthComparison.previousMonth + 1}`} onClick={openPreviousMonth} /></p>
                       </div>
                       <div className="rounded-2xl px-4 py-4 text-left text-white bg-[#2563EB] shadow-sm">
                         <button type="button" onClick={clearFilters} className="w-full text-left bg-transparent border-0 p-0 text-white">
-                          <p className="text-[11px] font-semibold text-white/80">Tích lũy</p>
+                          <p className="text-[11px] font-semibold text-white">Tích lũy</p>
                           <p className="text-xl font-black mt-1 tabular-nums">{utils.formatVND(monthComparison.surplus)}</p>
                         </button>
                         <p className="mt-2"><DeltaLabel light delta={monthComparison.surplusDelta} prefix={`so với T${monthComparison.previousMonth + 1}`} onClick={openPreviousMonth} /></p>
