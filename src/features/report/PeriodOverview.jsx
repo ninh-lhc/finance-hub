@@ -37,20 +37,42 @@ function formatShare(share) {
 function formatAxis(amount) {
   if (amount <= 0) return '0';
   const millions = amount / 1_000_000;
-  const rounded = millions >= 10 ? Math.round(millions) : Math.round(millions * 10) / 10;
+  const rounded = Math.abs(millions - Math.round(millions)) < 0.05
+    ? Math.round(millions)
+    : Math.round(millions * 10) / 10;
   return `${String(rounded).replace('.', ',')} tr`;
 }
 
-function chartMax(peak) {
-  return niceMax(Math.max(peak, 4_000_000));
+function buildScale(peak) {
+  const millions = Math.max(peak, 1_000_000) / 1_000_000;
+  const rawStep = millions / 5;
+  const power = 10 ** Math.floor(Math.log10(Math.max(rawStep, 0.01)));
+  const normalized = rawStep / power;
+  const stepTr = Math.max(1, (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * power);
+  const steps = Math.max(1, Math.ceil((millions * 1.05) / stepTr));
+  const max = steps * stepTr * 1_000_000;
+  return { max, ticks: Array.from({ length: steps + 1 }, (_, index) => index * stepTr * 1_000_000) };
 }
 
-function niceMax(value) {
-  if (value <= 0) return 1;
-  const power = 10 ** Math.floor(Math.log10(value));
-  const normalized = value / power;
-  const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
-  return step * power;
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function smoothLine(points, minY, maxY) {
+  if (points.length < 2) return '';
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const p0 = points[Math.max(index - 1, 0)];
+    const p1 = points[index];
+    const p2 = points[index + 1];
+    const p3 = points[Math.min(index + 2, points.length - 1)];
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = clamp(p1.y + (p2.y - p0.y) / 6, minY, maxY);
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = clamp(p2.y - (p3.y - p1.y) / 6, minY, maxY);
+    path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+  }
+  return path;
 }
 
 function lastDay(year, monthIndex) {
@@ -110,88 +132,197 @@ function ShareList({ title, rows }) {
   );
 }
 
+function ChartTooltip({ title, rows, x, y }) {
+  const placeLeft = x > 62;
+  return (
+    <div
+      className="absolute z-20 pointer-events-none rounded-lg bg-[#1B2559] text-white shadow-xl px-3 py-2.5 min-w-[190px] max-w-[260px]"
+      style={{
+        left: `${x}%`,
+        top: `${y}%`,
+        transform: placeLeft ? 'translate(calc(-100% - 14px), -40%)' : 'translate(14px, -40%)',
+      }}
+    >
+      <p className="text-xs font-semibold mb-1.5">{title}</p>
+      <div className="space-y-1">
+        {rows.map((row) => (
+          <p key={row.label} className="flex items-center gap-2 text-[11px] leading-4">
+            <span className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ background: row.color }} />
+            <span className="text-white/90">{row.label}: {utils.formatVND(row.amount)}</span>
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MonthlyChart({ monthly }) {
-  const max = chartMax(Math.max(...monthly.map((month) => Math.max(month.income, month.expense)), 0));
+  const [active, setActive] = useState(null);
+  const scale = buildScale(Math.max(...monthly.map((month) => Math.max(month.income, month.expense)), 0));
   const width = 760;
-  const height = 320;
-  const pad = { left: 56, right: 12, top: 12, bottom: 32 };
+  const height = 340;
+  const pad = { left: 52, right: 16, top: 18, bottom: 36 };
   const innerWidth = width - pad.left - pad.right;
   const innerHeight = height - pad.top - pad.bottom;
   const slot = innerWidth / Math.max(monthly.length, 1);
-  const barWidth = Math.min(16, slot * 0.28);
-  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const barWidth = Math.min(22, slot * 0.32);
+  const base = pad.top + innerHeight;
+  const activeMonth = active == null ? null : monthly[active];
+  const activeCenter = active == null ? 0 : pad.left + slot * active + slot / 2;
+  const activeTop = activeMonth
+    ? base - (Math.max(activeMonth.income, activeMonth.expense) / scale.max) * innerHeight
+    : base;
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" role="img" aria-label="Thu chi theo tháng">
-      {ticks.map((tick) => {
-        const y = pad.top + innerHeight - tick * innerHeight;
-        return (
-          <g key={tick}>
-            <line x1={pad.left} x2={width - pad.right} y1={y} y2={y} stroke="#E8EDF5" />
-            <text x={pad.left - 8} y={y + 4} textAnchor="end" fill="#94A3B8" fontSize="12">{formatAxis(max * tick)}</text>
-          </g>
-        );
-      })}
-      {monthly.map((month, index) => {
-        const center = pad.left + slot * index + slot / 2;
-        const base = pad.top + innerHeight;
-        const incomeHeight = (month.income / max) * innerHeight;
-        const expenseHeight = (month.expense / max) * innerHeight;
-        return (
-          <g key={month.key}>
-            <rect x={center - barWidth - 2} y={base - incomeHeight} width={barWidth} height={incomeHeight} rx="3" fill={INCOME_COLOR}>
-              <title>{`Thu ${utils.formatVND(month.income)}`}</title>
-            </rect>
-            <rect x={center + 2} y={base - expenseHeight} width={barWidth} height={expenseHeight} rx="3" fill={EXPENSE_COLOR}>
-              <title>{`Chi ${utils.formatVND(month.expense)}`}</title>
-            </rect>
-            <text x={center} y={height - 10} textAnchor="middle" fill="#64748B" fontSize="11">{month.label}</text>
-          </g>
-        );
-      })}
-    </svg>
+    <div className="relative" onMouseLeave={() => setActive(null)}>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" role="img" aria-label="Thu chi theo tháng">
+        <defs>
+          <linearGradient id="income-bar" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#34D399" />
+            <stop offset="100%" stopColor={INCOME_COLOR} />
+          </linearGradient>
+          <linearGradient id="expense-bar" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#FB7185" />
+            <stop offset="100%" stopColor={EXPENSE_COLOR} />
+          </linearGradient>
+        </defs>
+        {scale.ticks.map((tick) => {
+          const y = base - (tick / scale.max) * innerHeight;
+          return (
+            <g key={tick}>
+              <line x1={pad.left} x2={width - pad.right} y1={y} y2={y} stroke="#E8EDF5" />
+              <text x={pad.left - 8} y={y + 4} textAnchor="end" fill="#94A3B8" fontSize="12">{formatAxis(tick)}</text>
+            </g>
+          );
+        })}
+        {monthly.map((month, index) => {
+          const center = pad.left + slot * index + slot / 2;
+          const incomeHeight = (month.income / scale.max) * innerHeight;
+          const expenseHeight = (month.expense / scale.max) * innerHeight;
+          const hovered = active === index;
+          return (
+            <g key={month.key}>
+              <rect x={center - slot / 2} y={pad.top} width={slot} height={innerHeight} fill={hovered ? 'rgba(67,24,255,0.05)' : 'transparent'} />
+              {incomeHeight > 0 && (
+                <rect x={center - barWidth - 3} y={base - incomeHeight} width={barWidth} height={incomeHeight} rx="5" fill="url(#income-bar)" />
+              )}
+              {expenseHeight > 0 && (
+                <rect x={center + 3} y={base - expenseHeight} width={barWidth} height={expenseHeight} rx="5" fill="url(#expense-bar)" />
+              )}
+              <text x={center} y={height - 12} textAnchor="middle" fill={hovered ? '#1B2559' : '#64748B'} fontSize="12" fontWeight={hovered ? 700 : 500}>{month.label}</text>
+              <rect x={center - slot / 2} y={pad.top} width={slot} height={innerHeight + 28} fill="transparent" onMouseEnter={() => setActive(index)} />
+            </g>
+          );
+        })}
+      </svg>
+      {activeMonth && (
+        <ChartTooltip
+          title={activeMonth.label}
+          x={(activeCenter / width) * 100}
+          y={clamp((activeTop / height) * 100, 12, 70)}
+          rows={[
+            { label: 'Thu', amount: activeMonth.income, color: INCOME_COLOR },
+            { label: 'Chi', amount: activeMonth.expense, color: EXPENSE_COLOR },
+            { label: 'Chênh lệch', amount: activeMonth.surplus, color: SURPLUS_COLOR },
+          ]}
+        />
+      )}
+    </div>
   );
 }
 
 function TrendChart({ trends, months }) {
+  const [active, setActive] = useState(null);
   if (trends.length === 0) {
     return <p className="text-sm text-slate-400">Chưa có khoản chi để vẽ xu hướng.</p>;
   }
-  const max = chartMax(Math.max(...trends.flatMap((trend) => trend.points), 0));
+  const scale = buildScale(Math.max(...trends.flatMap((trend) => trend.points), 0));
   const width = 760;
-  const height = 300;
-  const pad = { left: 56, right: 16, top: 16, bottom: 32 };
+  const height = 340;
+  const pad = { left: 52, right: 18, top: 18, bottom: 36 };
   const innerWidth = width - pad.left - pad.right;
   const innerHeight = height - pad.top - pad.bottom;
+  const base = pad.top + innerHeight;
   const xAt = (index) => pad.left + (months.length <= 1 ? innerWidth / 2 : (index / (months.length - 1)) * innerWidth);
-  const yAt = (value) => pad.top + innerHeight - (value / max) * innerHeight;
-  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const yAt = (value) => base - (value / scale.max) * innerHeight;
+  const slot = months.length <= 1 ? innerWidth : innerWidth / (months.length - 1);
+  const activeMonth = active == null ? null : months[active];
+  const activeValues = active == null ? [] : trends.map((trend) => trend.points[active] || 0);
+  const guideY = activeValues.length ? yAt(Math.max(...activeValues)) : base;
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" role="img" aria-label="Xu hướng chi theo danh mục">
-      {ticks.map((tick) => {
-        const y = yAt(max * tick);
-        return (
-          <g key={tick}>
-            <line x1={pad.left} x2={width - pad.right} y1={y} y2={y} stroke="#E8EDF5" />
-            <text x={pad.left - 8} y={y + 4} textAnchor="end" fill="#94A3B8" fontSize="12">{formatAxis(max * tick)}</text>
-          </g>
-        );
-      })}
-      {trends.map((trend, index) => {
-        const color = CHART_COLORS[index % CHART_COLORS.length];
-        const points = trend.points.map((value, pointIndex) => `${xAt(pointIndex)},${yAt(value)}`).join(' ');
-        return (
-          <g key={trend.name}>
-            <polyline fill="none" stroke={color} strokeWidth="2.75" strokeLinejoin="round" strokeLinecap="round" points={points} />
-            {trend.points.map((value, pointIndex) => (
-              <circle key={`${trend.name}-${pointIndex}`} cx={xAt(pointIndex)} cy={yAt(value)} r="3.5" fill="#fff" stroke={color} strokeWidth="2" />
-            ))}
-          </g>
-        );
-      })}
-      {months.map((month, index) => (
-        <text key={month.key} x={xAt(index)} y={height - 10} textAnchor="middle" fill="#64748B" fontSize="11">{month.label}</text>
-      ))}
-    </svg>
+    <div className="relative" onMouseLeave={() => setActive(null)}>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" role="img" aria-label="Xu hướng chi theo danh mục">
+        {scale.ticks.map((tick) => {
+          const y = yAt(tick);
+          return (
+            <g key={tick}>
+              <line x1={pad.left} x2={width - pad.right} y1={y} y2={y} stroke="#E8EDF5" />
+              <text x={pad.left - 8} y={y + 4} textAnchor="end" fill="#94A3B8" fontSize="12">{formatAxis(tick)}</text>
+            </g>
+          );
+        })}
+        {trends.map((trend, index) => {
+          const color = CHART_COLORS[index % CHART_COLORS.length];
+          const points = trend.points.map((value, pointIndex) => ({ x: xAt(pointIndex), y: yAt(value) }));
+          const line = smoothLine(points, pad.top, base);
+          const last = points[points.length - 1];
+          const area = `${line} L ${last.x} ${base} L ${points[0].x} ${base} Z`;
+          return (
+            <g key={trend.name}>
+              <path d={area} fill={color} fillOpacity="0.08" />
+              <path d={line} fill="none" stroke={color} strokeWidth="2.75" strokeLinejoin="round" strokeLinecap="round" />
+            </g>
+          );
+        })}
+        {active != null && (
+          <line x1={xAt(active)} x2={xAt(active)} y1={pad.top} y2={base} stroke="#94A3B8" strokeDasharray="4 4" />
+        )}
+        {trends.map((trend, index) => {
+          const color = CHART_COLORS[index % CHART_COLORS.length];
+          return trend.points.map((value, pointIndex) => {
+            const hovered = active === pointIndex;
+            return (
+              <circle
+                key={`${trend.name}-${pointIndex}`}
+                cx={xAt(pointIndex)}
+                cy={yAt(value)}
+                r={hovered ? 5.5 : 4}
+                fill={hovered ? color : '#fff'}
+                stroke={color}
+                strokeWidth="2.5"
+              />
+            );
+          });
+        })}
+        {months.map((month, index) => (
+          <text key={month.key} x={xAt(index)} y={height - 12} textAnchor="middle" fill={active === index ? '#1B2559' : '#64748B'} fontSize="12" fontWeight={active === index ? 700 : 500}>{month.label}</text>
+        ))}
+        {months.map((month, index) => (
+          <rect
+            key={`${month.key}-hit`}
+            x={xAt(index) - slot / 2}
+            y={pad.top}
+            width={slot}
+            height={innerHeight + 28}
+            fill="transparent"
+            onMouseEnter={() => setActive(index)}
+          />
+        ))}
+      </svg>
+      {activeMonth && (
+        <ChartTooltip
+          title={activeMonth.label}
+          x={(xAt(active) / width) * 100}
+          y={clamp((guideY / height) * 100, 14, 68)}
+          rows={trends.map((trend, index) => ({
+            label: trend.name,
+            amount: trend.points[active] || 0,
+            color: CHART_COLORS[index % CHART_COLORS.length],
+          }))}
+        />
+      )}
+    </div>
   );
 }
 
