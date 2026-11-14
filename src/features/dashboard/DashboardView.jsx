@@ -127,31 +127,34 @@ function ColorStat({ tone, label, shortLabel, amount, compact, detail, shortDeta
 function SixMonthChart({ months, ready }) {
   const [active, setActive] = useState(null);
   const frameRef = useRef(null);
-  const [plotHeight, setPlotHeight] = useState(230);
+  const [frame, setFrame] = useState({ width: 640, plot: 240 });
   const peak = Math.max(...months.map((month) => Math.max(month.income, month.expense)), 0);
   const scale = chartScale(peak);
   const width = 640;
-  const height = plotHeight;
-  const pad = { left: 46, right: 12, top: 12, bottom: 28 };
+  const pad = { left: 52, right: 18, top: 12, bottom: 28 };
+  const legendSpace = 36;
   useEffect(() => {
     const node = frameRef.current;
-    if (!node || typeof ResizeObserver === 'undefined') return undefined;
+    if (!node) return undefined;
     const update = () => {
-      const widthPx = node.clientWidth;
-      const heightPx = node.clientHeight;
-      if (!widthPx || !heightPx) return;
-      const next = Math.max(230, Math.round((width * heightPx) / widthPx));
-      setPlotHeight((current) => (current === next ? current : next));
+      const widthPx = Math.max(1, Math.round(node.clientWidth));
+      const plot = Math.max(160, Math.round(node.clientHeight - legendSpace));
+      setFrame((current) => (current.width === widthPx && current.plot === plot ? current : { width: widthPx, plot }));
     };
     update();
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    observer?.observe(node);
+    const timer = window.setInterval(update, 400);
+    return () => {
+      observer?.disconnect();
+      window.clearInterval(timer);
+    };
+  }, [ready]);
+  const height = Math.max(220, Math.round((width * frame.plot) / frame.width));
   const innerWidth = width - pad.left - pad.right;
   const innerHeight = height - pad.top - pad.bottom;
   const slot = innerWidth / Math.max(months.length, 1);
-  const barWidth = Math.min(16, slot * 0.26);
+  const barWidth = slot * 0.3;
   const base = pad.top + innerHeight;
   const activeMonth = active == null ? null : months[active];
   const tipX = active == null ? 0 : ((pad.left + slot * active + slot / 2) / width) * 100;
@@ -162,9 +165,8 @@ function SixMonthChart({ months, ready }) {
       {!ready ? (
         <p className="text-sm text-gray-400 py-12 text-center">Đang tổng hợp các tháng...</p>
       ) : (
-        <div className="relative mt-3 flex-1 min-h-[220px] flex flex-col" onPointerLeave={(event) => { if (event.pointerType !== 'touch') setActive(null); }}>
-          <div ref={frameRef} className="relative flex-1 min-h-[180px]">
-          <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 w-full h-full" role="img" aria-label="Thu chi 6 tháng gần nhất">
+        <div ref={frameRef} className="relative mt-4 flex-1 min-h-[220px]" onPointerLeave={(event) => { if (event.pointerType !== 'touch') setActive(null); }}>
+          <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-x-0 top-0 w-full" style={{ height: `calc(100% - ${legendSpace}px)` }} role="img" aria-label="Thu chi 6 tháng gần nhất">
             {scale.ticks.map((tick) => {
               const y = base - (tick / scale.max) * innerHeight;
               return (
@@ -182,8 +184,8 @@ function SixMonthChart({ months, ready }) {
               return (
                 <g key={month.month}>
                   <rect x={center - slot / 2} y={pad.top} width={slot} height={innerHeight} fill={hovered ? 'rgba(67,24,255,0.05)' : 'transparent'} />
-                  {incomeHeight > 0 && <rect x={center - barWidth - 2} y={base - incomeHeight} width={barWidth} height={incomeHeight} rx="4" fill={INCOME_COLOR} />}
-                  {expenseHeight > 0 && <rect x={center + 2} y={base - expenseHeight} width={barWidth} height={expenseHeight} rx="4" fill={EXPENSE_COLOR} />}
+                  {incomeHeight > 0 && <rect x={center - barWidth - 3} y={base - incomeHeight} width={barWidth} height={incomeHeight} rx="6" fill={INCOME_COLOR} />}
+                  {expenseHeight > 0 && <rect x={center + 3} y={base - expenseHeight} width={barWidth} height={expenseHeight} rx="6" fill={EXPENSE_COLOR} />}
                   <text x={center} y={height - 8} textAnchor="middle" fill={hovered ? '#1B2559' : '#64748B'} fontSize="12" fontWeight={hovered ? 700 : 500}>{month.label}</text>
                   <rect
                     x={center - slot / 2}
@@ -208,8 +210,7 @@ function SixMonthChart({ months, ready }) {
               <p className="text-[12px]" style={{ color: EXPENSE_COLOR }}>Chi: {utils.formatVND(activeMonth.expense)}</p>
             </div>
           )}
-          </div>
-          <div className="flex items-center justify-center gap-4 mt-2 text-[13px] text-slate-600">
+          <div data-legend className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-4 text-[13px] text-slate-600">
             <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: INCOME_COLOR }} />Thu</span>
             <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: EXPENSE_COLOR }} />Chi</span>
           </div>
