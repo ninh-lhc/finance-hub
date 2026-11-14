@@ -97,37 +97,42 @@ function StatCard({ label, value, detail, accent }) {
   );
 }
 
-function ShareList({ title, rows }) {
+function ShareRows({ rows }) {
   const scale = rows[0]?.amount || 1;
+  if (rows.length === 0) {
+    return <p className="text-sm text-slate-400">Chưa có khoản nào trong kỳ này.</p>;
+  }
   return (
-    <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6 min-w-0">
-      <h3 className="text-base font-semibold text-slate-800 mb-5">{title}</h3>
-      {rows.length === 0 ? (
-        <p className="text-sm text-slate-400">Chưa có khoản nào trong kỳ này.</p>
-      ) : (
-        <div className="space-y-4 max-h-[460px] overflow-y-auto custom-scrollbar pr-1">
-          {rows.map((row, index) => {
-            const color = CHART_COLORS[index % CHART_COLORS.length];
-            return (
-              <div key={row.name} className="flex gap-3 min-w-0">
-                <Mark name={row.name} color={color} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <p className="text-sm font-medium text-slate-800 truncate">{row.name}</p>
-                    <p className="text-sm font-semibold text-slate-700 tabular-nums shrink-0">
-                      {utils.formatVND(row.amount)}
-                      <span className="text-slate-400 font-medium ml-2">{formatShare(row.share)}</span>
-                    </p>
-                  </div>
-                  <div className="mt-2 h-2 rounded-full bg-slate-100 overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${Math.max((row.amount / scale) * 100, row.amount > 0 ? 2 : 0)}%`, background: color }} />
-                  </div>
-                </div>
+    <div className="space-y-4">
+      {rows.map((row, index) => {
+        const color = CHART_COLORS[index % CHART_COLORS.length];
+        return (
+          <div key={row.name} className="flex gap-3 min-w-0">
+            <Mark name={row.name} color={color} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-sm font-medium text-slate-800 truncate">{row.name}</p>
+                <p className="text-sm font-semibold text-slate-700 tabular-nums shrink-0">
+                  {utils.formatVND(row.amount)}
+                  <span className="text-slate-400 font-medium ml-2">{formatShare(row.share)}</span>
+                </p>
               </div>
-            );
-          })}
-        </div>
-      )}
+              <div className="mt-2 h-2 rounded-full bg-slate-100 overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${Math.max((row.amount / scale) * 100, row.amount > 0 ? 2 : 0)}%`, background: color }} />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ShareList({ title, rows }) {
+  return (
+    <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6 min-w-0 h-full">
+      <h3 className="text-base font-semibold text-slate-800 mb-5">{title}</h3>
+      <ShareRows rows={rows} />
     </section>
   );
 }
@@ -432,10 +437,15 @@ export default function PeriodOverview({
             <Legend items={period.trends.map((trend, index) => ({ label: trend.name, color: CHART_COLORS[index % CHART_COLORS.length] }))} />
           </section>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
             <ShareList title="Chi theo danh mục" rows={period.expenseCategories} />
-            <ShareList title="Thu theo danh mục" rows={period.incomeCategories} />
-            <ShareList title="Chi theo ví" rows={period.walletExpenses} />
+            <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6 min-w-0 h-full flex flex-col">
+              <h3 className="text-base font-semibold text-slate-800 mb-5">Thu theo danh mục</h3>
+              <ShareRows rows={period.incomeCategories} />
+              <div className="my-6 border-t border-slate-100" />
+              <h3 className="text-base font-semibold text-slate-800 mb-5">Chi theo ví</h3>
+              <ShareRows rows={period.walletExpenses} />
+            </section>
           </div>
 
           <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6">

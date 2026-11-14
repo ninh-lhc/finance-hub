@@ -1,9 +1,16 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import {
-  ArrowRightLeft, Search, FileDown, Upload, Download, Loader2, Filter, Link2, Edit2, Trash2
+  ArrowRightLeft, Search, FileDown, Upload, Download, Loader2, Link2, Edit2, Trash2
 } from 'lucide-react';
 import utils from '../../utils/format.js';
 import { DeltaLabel } from '../dashboard/MonthComparisonPanel.jsx';
+
+function monthBounds(year, month) {
+  const start = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  const endDay = new Date(year, month + 1, 0).getDate();
+  const end = `${year}-${String(month + 1).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
+  return { start, end };
+}
 
 function groupTransactionsByDate(transactions) {
   const groups = [];
@@ -45,10 +52,37 @@ export default function TransactionsView(props) {
     monthComparison,
   } = props;
 
+  const bounds = monthBounds(selectedYear, selectedMonth);
+  const monthKey = `${selectedYear}-${selectedMonth}`;
+  const [customRange, setCustomRange] = useState(null);
+  const from = customRange?.key === monthKey ? customRange.from : bounds.start;
+  const to = customRange?.key === monthKey ? customRange.to : bounds.end;
+  const setFrom = (value) => setCustomRange({ key: monthKey, from: value, to });
+  const setTo = (value) => setCustomRange({ key: monthKey, from, to: value });
+
   const openPreviousMonth = () => {
     if (!monthComparison) return;
     setSelectedMonth(monthComparison.previousMonth);
     setSelectedYear(monthComparison.previousYear);
+  };
+
+  const clearFilters = () => {
+    setFilterType('ALL');
+    setFilterWallet('ALL');
+    setFilterCategory('ALL');
+    setSearchQuery('');
+    setCustomRange(null);
+  };
+
+  const jumpThisMonth = () => {
+    const now = new Date();
+    setSelectedMonth(now.getMonth());
+    setSelectedYear(now.getFullYear());
+    setFilterType('ALL');
+    setFilterWallet('ALL');
+    setFilterCategory('ALL');
+    setSearchQuery('');
+    setCustomRange(null);
   };
 
   const applyCategoryFilter = (transaction) => {
@@ -57,7 +91,17 @@ export default function TransactionsView(props) {
     setFilterWallet('ALL');
   };
 
-  const groupedTransactions = groupTransactionsByDate(logic.filteredTransactions);
+  const rangedTransactions = logic.filteredTransactions.filter((transaction) => {
+    const date = transaction.date || '';
+    return (!from || date >= from) && (!to || date <= to);
+  });
+  const groupedTransactions = groupTransactionsByDate(rangedTransactions);
+  const fieldClass = 'bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 outline-none w-full';
+  const categoryOptions = [...new Set(filterType === 'INCOME'
+    ? (categories?.INCOME || [])
+    : filterType === 'EXPENSE'
+      ? (categories?.EXPENSE || [])
+      : [...(categories?.INCOME || []), ...(categories?.EXPENSE || [])])];
 
   return (
             <div className="space-y-6 animate-in fade-in">
@@ -77,11 +121,6 @@ export default function TransactionsView(props) {
                               {utils.getRelativeYears(selectedYear).map(y => <option key={y} value={y}>{y}</option>)}
                            </select>
                         </div>
-                        <div className="relative flex-1 md:w-64">
-                           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                           <input type="text" placeholder={`Tìm trong T${selectedMonth + 1}...`} className="pl-12 pr-6 py-3 bg-[#F4F7FE] rounded-2xl text-xs font-black w-full outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}/>
-                        </div>
-                        
                         <div className="flex gap-2">
                            <button onClick={handleDownloadSampleCSV} className="flex items-center justify-center gap-1.5 bg-white border border-gray-200 text-[#1B2559] px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 shadow-sm transition-all flex-shrink-0" title="Tải file Mẫu Excel">
                               <FileDown size={16}/> Mẫu
@@ -99,55 +138,71 @@ export default function TransactionsView(props) {
 
                   {monthComparison?.ready && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                      <div className={`rounded-2xl px-4 py-3 text-left border ${filterType === 'INCOME' ? 'bg-white border-[#4318FF] shadow-sm' : 'bg-[#F4F7FE] border-transparent'}`}>
-                        <button type="button" onClick={() => setFilterType('INCOME')} className="w-full text-left bg-transparent border-0 p-0">
-                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Thu tháng này</p>
-                          <p className="text-sm font-black text-[#05CD99] mt-1">{utils.formatVND(monthComparison.income)}</p>
+                      <div className={`rounded-2xl px-4 py-4 text-left text-white bg-[#05CD99] shadow-sm ${filterType === 'INCOME' ? 'ring-2 ring-offset-2 ring-[#05CD99]' : ''}`}>
+                        <button type="button" onClick={() => setFilterType('INCOME')} className="w-full text-left bg-transparent border-0 p-0 text-white">
+                          <p className="text-[11px] font-semibold text-white/80">Thu tháng này</p>
+                          <p className="text-xl font-black mt-1 tabular-nums">{utils.formatVND(monthComparison.income)}</p>
                         </button>
-                        <p className="mt-1"><DeltaLabel delta={monthComparison.incomeDelta} prefix={`so với T${monthComparison.previousMonth + 1}`} onClick={openPreviousMonth} /></p>
+                        <p className="mt-2"><DeltaLabel light delta={monthComparison.incomeDelta} prefix={`so với T${monthComparison.previousMonth + 1}`} onClick={openPreviousMonth} /></p>
                       </div>
-                      <div className={`rounded-2xl px-4 py-3 text-left border ${filterType === 'EXPENSE' ? 'bg-white border-[#EE5D50] shadow-sm' : 'bg-[#F4F7FE] border-transparent'}`}>
-                        <button type="button" onClick={() => setFilterType('EXPENSE')} className="w-full text-left bg-transparent border-0 p-0">
-                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Chi tháng này</p>
-                          <p className="text-sm font-black text-[#EE5D50] mt-1">{utils.formatVND(monthComparison.expense)}</p>
+                      <div className={`rounded-2xl px-4 py-4 text-left text-white bg-[#EE5D50] shadow-sm ${filterType === 'EXPENSE' ? 'ring-2 ring-offset-2 ring-[#EE5D50]' : ''}`}>
+                        <button type="button" onClick={() => setFilterType('EXPENSE')} className="w-full text-left bg-transparent border-0 p-0 text-white">
+                          <p className="text-[11px] font-semibold text-white/80">Chi tháng này</p>
+                          <p className="text-xl font-black mt-1 tabular-nums">{utils.formatVND(monthComparison.expense)}</p>
                         </button>
-                        <p className="mt-1"><DeltaLabel delta={monthComparison.expenseDelta} invert prefix={`so với T${monthComparison.previousMonth + 1}`} onClick={openPreviousMonth} /></p>
+                        <p className="mt-2"><DeltaLabel light invert delta={monthComparison.expenseDelta} prefix={`so với T${monthComparison.previousMonth + 1}`} onClick={openPreviousMonth} /></p>
                       </div>
-                      <div className={`rounded-2xl px-4 py-3 text-left border ${filterType === 'ALL' ? 'bg-white border-[#1B2559] shadow-sm' : 'bg-[#F4F7FE] border-transparent'}`}>
-                        <button type="button" onClick={() => { setFilterType('ALL'); setFilterCategory('ALL'); setFilterWallet('ALL'); }} className="w-full text-left bg-transparent border-0 p-0">
-                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Tích lũy</p>
-                          <p className="text-sm font-black text-[#1B2559] mt-1">{utils.formatVND(monthComparison.surplus)}</p>
+                      <div className="rounded-2xl px-4 py-4 text-left text-white bg-[#2563EB] shadow-sm">
+                        <button type="button" onClick={clearFilters} className="w-full text-left bg-transparent border-0 p-0 text-white">
+                          <p className="text-[11px] font-semibold text-white/80">Tích lũy</p>
+                          <p className="text-xl font-black mt-1 tabular-nums">{utils.formatVND(monthComparison.surplus)}</p>
                         </button>
-                        <p className="mt-1"><DeltaLabel delta={monthComparison.surplusDelta} prefix={`so với T${monthComparison.previousMonth + 1}`} onClick={openPreviousMonth} /></p>
+                        <p className="mt-2"><DeltaLabel light delta={monthComparison.surplusDelta} prefix={`so với T${monthComparison.previousMonth + 1}`} onClick={openPreviousMonth} /></p>
                       </div>
                     </div>
                   )}
 
-                  {/* BỘ LỌC THÔNG MINH */}
-                  <div className="flex flex-wrap items-center gap-3 mb-8 bg-[#F8F9FA] p-3 rounded-2xl border border-gray-100">
-                     <div className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">
-                        <Filter size={14} /> Lọc theo:
-                     </div>
-                     <select className="bg-white w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-black outline-none border border-gray-100 shadow-sm text-[#1B2559] cursor-pointer" value={filterType} onChange={e => setFilterType(e.target.value)}>
-                        <option value="ALL">Tất cả giao dịch</option>
-                        <option value="INCOME">Chỉ khoản Thu</option>
-                        <option value="EXPENSE">Chỉ khoản Chi</option>
-                     </select>
-                     <select className="bg-white w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-black outline-none border border-gray-100 shadow-sm text-[#1B2559] cursor-pointer" value={filterWallet} onChange={e => setFilterWallet(e.target.value)}>
-                        <option value="ALL">Tất cả Ví / Nguồn</option>
-                        {(wallets || []).map(w => <option key={w} value={w}>{w}</option>)}
-                     </select>
-                     <select className="bg-white w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-black outline-none border border-gray-100 shadow-sm text-[#1B2559] cursor-pointer" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
-                        <option value="ALL">Tất cả Danh mục</option>
-                        {filterType === 'INCOME' && (categories?.INCOME || []).map(c => <option key={c} value={c}>{c}</option>)}
-                        {filterType === 'EXPENSE' && (categories?.EXPENSE || []).map(c => <option key={c} value={c}>{c}</option>)}
-                        {filterType === 'ALL' && [...(categories?.INCOME || []), ...(categories?.EXPENSE || [])].map(c => <option key={c} value={c}>{c}</option>)}
-                     </select>
-                     {(filterType !== 'ALL' || filterWallet !== 'ALL' || filterCategory !== 'ALL') && (
-                        <button onClick={() => { setFilterType('ALL'); setFilterWallet('ALL'); setFilterCategory('ALL'); }} className="text-[10px] font-black text-[#EE5D50] hover:bg-red-50 px-4 py-2.5 rounded-xl transition-all ml-auto">
-                           XÓA LỌC BỎ
-                        </button>
-                     )}
+                  <div className="mb-8 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                      <label className="text-xs text-slate-500 flex flex-col gap-1.5">
+                        Từ ngày
+                        <input type="date" min={bounds.start} max={bounds.end} value={from} onChange={(event) => setFrom(event.target.value)} className={fieldClass} />
+                      </label>
+                      <label className="text-xs text-slate-500 flex flex-col gap-1.5">
+                        Đến ngày
+                        <input type="date" min={bounds.start} max={bounds.end} value={to} onChange={(event) => setTo(event.target.value)} className={fieldClass} />
+                      </label>
+                      <label className="text-xs text-slate-500 flex flex-col gap-1.5">
+                        Loại
+                        <select value={filterType} onChange={(event) => setFilterType(event.target.value)} className={fieldClass}>
+                          <option value="ALL">Tất cả</option>
+                          <option value="INCOME">Thu</option>
+                          <option value="EXPENSE">Chi</option>
+                        </select>
+                      </label>
+                      <label className="text-xs text-slate-500 flex flex-col gap-1.5">
+                        Danh mục
+                        <select value={filterCategory} onChange={(event) => setFilterCategory(event.target.value)} className={fieldClass}>
+                          <option value="ALL">Tất cả</option>
+                          {categoryOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                        </select>
+                      </label>
+                      <label className="text-xs text-slate-500 flex flex-col gap-1.5">
+                        Ví
+                        <select value={filterWallet} onChange={(event) => setFilterWallet(event.target.value)} className={fieldClass}>
+                          <option value="ALL">Tất cả ví</option>
+                          {(wallets || []).map((name) => <option key={name} value={name}>{name}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input type="text" placeholder="Ghi chú, danh mục..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className={`${fieldClass} pl-9`} />
+                      </div>
+                      <button type="button" onClick={jumpThisMonth} className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50">Tháng này</button>
+                      <button type="button" onClick={clearFilters} className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50">Xóa lọc</button>
+                    </div>
                   </div>
                   
                   <div className="md:hidden space-y-4">
@@ -223,7 +278,7 @@ export default function TransactionsView(props) {
                         </tbody>
                      </table>
                   </div>
-                  {logic.filteredTransactions.length === 0 && (
+                  {rangedTransactions.length === 0 && (
                      <div className="py-10 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Không tìm thấy giao dịch nào phù hợp</div>
                   )}
                </div>

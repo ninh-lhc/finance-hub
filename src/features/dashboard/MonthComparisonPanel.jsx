@@ -25,8 +25,8 @@ function DeltaIcon({ delta }) {
   return <ArrowUp size={11} strokeWidth={3} />;
 }
 
-export function DeltaLabel({ delta, invert = false, prefix, onClick }) {
-  const className = `inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide ${deltaClass(delta, invert)} ${onClick ? 'cursor-pointer hover:underline bg-transparent border-0 p-0' : ''}`;
+export function DeltaLabel({ delta, invert = false, prefix, onClick, light = false }) {
+  const className = `inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wide ${light ? 'text-white/85' : deltaClass(delta, invert)} ${onClick ? 'cursor-pointer hover:underline bg-transparent border-0 p-0' : ''}`;
   const content = (
     <>
       <DeltaIcon delta={delta} />
