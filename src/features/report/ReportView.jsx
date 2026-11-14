@@ -4,6 +4,7 @@ import utils from '../../utils/format.js';
 import { DeltaLabel } from '../dashboard/MonthComparisonPanel.jsx';
 import { transactionsForCategory } from '../../logic/monthReport.js';
 import PeriodOverview from './PeriodOverview.jsx';
+import BudgetSnapshot from './BudgetSnapshot.jsx';
 
 function monthTag(month, year, selectedYear) {
   const label = `T${month + 1}`;
@@ -105,6 +106,8 @@ export default function ReportView({
   handleEditTransaction,
   yearTransactions,
   wallets,
+  budgets = [],
+  onOpenBudgets,
 }) {
   const [selection, setSelection] = useState(null);
 
@@ -168,6 +171,17 @@ export default function ReportView({
           </select>
         </div>
       </div>
+
+      <BudgetSnapshot
+        budgets={budgets}
+        expenseCategories={report?.expenseCategories || []}
+        samePeriodReady={Boolean(report?.samePeriodReady)}
+        ready={Boolean(report?.ready)}
+        monthLabel={`Tháng ${selectedMonth + 1}/${selectedYear}`}
+        previousLabel={previousLabel || 'Tháng trước'}
+        onOpenCategory={(name) => onOpenLedger('EXPENSE', name)}
+        onOpenBudgets={onOpenBudgets}
+      />
 
       <PeriodOverview
         key={selectedYear}

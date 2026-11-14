@@ -1032,6 +1032,12 @@ export default function App() {
               handleEditTransaction={handleEditTransaction}
               yearTransactions={annualTransactions}
               wallets={wallets}
+              budgets={budgets}
+              onOpenBudgets={() => {
+                setActiveTab('settings');
+                setActiveSettingTab('budget');
+                cancelEdit();
+              }}
               onOpenLedger={(type, category) => {
                 setFilterType(type);
                 setFilterCategory(category);
