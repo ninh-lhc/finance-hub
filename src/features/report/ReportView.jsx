@@ -180,7 +180,11 @@ export default function ReportView({
       />
 
       {report?.ready && (
-        <>
+        <details className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+          <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-slate-800">
+            Đối chiếu với tháng trước và cùng kỳ · Tháng {selectedMonth + 1}/{selectedYear}
+          </summary>
+          <div className="px-5 pb-5 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <SummaryCard
               label="Thu nhập"
@@ -355,7 +359,8 @@ export default function ReportView({
               </div>
             )}
           </div>
-        </>
+          </div>
+        </details>
       )}
     </div>
   );
