@@ -22,7 +22,6 @@ import { deriveFinanceLogic, deriveTransactionView } from './logic/deriveFinance
 import { buildDataSourceDiagnostics } from './logic/dataSourceDiagnostics.js';
 import { buildMonthComparison, filterByYearMonth, previousPeriod } from './logic/monthComparison.js';
 import { buildMonthReport } from './logic/monthReport.js';
-import { READ_ONLY_DATA, READ_ONLY_MESSAGE } from './logic/readOnlyData.js';
 import {
   parseFinanceCsv,
   serializeFinanceCsv,
@@ -198,12 +197,6 @@ export default function App() {
     setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000);
   };
 
-  const blockDataWrite = () => {
-    if (!READ_ONLY_DATA) return false;
-    showToast(READ_ONLY_MESSAGE, 'warning');
-    return true;
-  };
-
   const handleInspectLegacyMigration = async () => {
     const inspectGate = canStartLegacyMigrationInspect({
       user,
@@ -255,7 +248,6 @@ export default function App() {
   };
 
   const resetWalletBalance = async (wName) => {
-    if (blockDataWrite()) return;
     if (!user || isProcessing) return;
     setIsProcessing(true);
     showToast('Đang kiểm tra lịch sử giao dịch...', 'success');
@@ -405,7 +397,6 @@ export default function App() {
   const dbActions = {
     // TÍNH NĂNG MỚI: TỰ ĐỘNG CHỮA LỖI SỐ DƯ
     recalculateAllBalances: async () => {
-      if (blockDataWrite()) return;
       if (!user || isProcessing) return;
       setIsProcessing(true);
       showToast('Đang quét và tính toán lại toàn bộ số dư...', 'success');
@@ -424,7 +415,6 @@ export default function App() {
     },
 
     generateSampleData: async () => {
-      if (blockDataWrite()) return;
       if (!user || isProcessing) return;
       setIsProcessing(true);
       try {
@@ -444,7 +434,6 @@ export default function App() {
     },
 
     clearSampleData: async () => {
-      if (blockDataWrite()) return;
       if (!user || isProcessing) return;
       setIsProcessing(true);
       showToast('Đang dọn dẹp dữ liệu mẫu...', 'success');
@@ -468,7 +457,6 @@ export default function App() {
     },
 
     saveTransaction: async () => {
-      if (blockDataWrite()) return;
       if (!user || saveTransactionLock.current) return;
       let transferGoalOut = { goalId: '', goalDelta: 0 };
       let transferGoalIn = { goalId: '', goalDelta: 0 };
@@ -576,7 +564,6 @@ export default function App() {
     },
     
     deleteItem: async (col, id, txObj) => {
-      if (blockDataWrite()) return;
       if (isProcessing) return;
       setIsProcessing(true);
       try {
@@ -625,7 +612,6 @@ export default function App() {
     },
 
     enableCloudSync: async () => {
-      if (blockDataWrite()) return;
       if (!user || isProcessing) return;
       setIsProcessing(true);
       const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -704,10 +690,6 @@ export default function App() {
   };
 
   const handleImportCSV = async (event) => {
-    if (blockDataWrite()) {
-      event.target.value = '';
-      return;
-    }
     const file = event.target.files[0];
     if (!file || !user) return;
     
@@ -795,7 +777,6 @@ export default function App() {
   };
 
   const handleEditTransaction = (tx) => {
-    if (blockDataWrite()) return;
     setModalType('TRANSACTION');
     setEditingTxId(tx.id);
     if (tx.category.includes('Chuyển khoản')) { showToast('Hãy xóa và tạo lại đối với giao dịch luân chuyển tiền.', 'warning'); return; }
@@ -805,7 +786,6 @@ export default function App() {
   };
 
   const handleSaveBudget = async () => {
-     if (blockDataWrite()) return;
      if (!user || !isBudgetFormReady(settingsForm)) return;
      const payload = buildBudgetPayload({ form: settingsForm });
      await saveBudgetToFirestore({ getCollectionRef, getDocRef, payload, editingId });
@@ -813,7 +793,6 @@ export default function App() {
   };
 
   const handleSaveWallet = async () => {
-     if (blockDataWrite()) return;
      const cleanName = normalizeWalletName(settingsForm.walletName);
      if (!cleanName) return;
      if (hasWalletNameConflict({ wallets, cleanName, editingId })) {
@@ -836,7 +815,6 @@ export default function App() {
   };
 
   const handleDeleteWallet = async (index) => {
-    if (blockDataWrite()) return;
     if (!user) return;
     if (!canDeleteWallet({ wallets })) {
       showToast('Cần giữ lại ít nhất một ví.', 'warning');
@@ -861,7 +839,6 @@ export default function App() {
   };
 
   const handleSaveCategory = async () => {
-     if (blockDataWrite()) return;
      if (!isCategoryFormReady(settingsForm)) return;
      const cleanName = normalizeCategoryName(settingsForm.categoryName);
      if (!cleanName) return;
@@ -898,7 +875,6 @@ export default function App() {
   };
 
   const handleDeleteCategory = async (index) => {
-    if (blockDataWrite()) return;
     if (!user) return;
     const categoryType = settingsForm.categoryType;
     if (!canDeleteCategory({ categories, categoryType, index })) {
@@ -920,7 +896,6 @@ export default function App() {
   };
 
   const handleSaveGoal = async () => {
-     if (blockDataWrite()) return;
      if (!user || !isGoalFormReady(settingsForm)) return;
      const payload = buildGoalPayload({ form: settingsForm });
      const previousGoal = editingId ? (goals || []).find((goal) => goal.id === editingId) : null;
@@ -974,7 +949,6 @@ export default function App() {
               setModalType={setModalType}
               setFormData={setFormData}
               setShowModal={setShowModal}
-              readOnly={READ_ONLY_DATA}
             />
             <MainNav activeTab={activeTab} setActiveTab={setActiveTab} />
          </div>
@@ -982,11 +956,6 @@ export default function App() {
 
       {/* --- MAIN CONTENT --- */}
       <main className="max-w-[1400px] mx-auto p-4 md:p-8 space-y-6 pb-24 lg:pb-8 overflow-x-hidden">
-         {READ_ONLY_DATA && (
-            <div className="bg-[#111C44] text-white rounded-[24px] px-5 py-4 text-xs font-bold leading-relaxed">
-               Bản xem thử đang đọc dữ liệu hiện có. Thêm, sửa và xóa đều bị khóa cho đến khi nhánh này được đưa vào bản chính.
-            </div>
-         )}
          {/* --- DASHBOARD TAB --- */}
          {activeTab === 'dashboard' && (
             <DashboardView
@@ -1042,7 +1011,6 @@ export default function App() {
               handleEditTransaction={handleEditTransaction}
               dbActions={dbActions}
               monthComparison={monthComparison}
-              readOnly={READ_ONLY_DATA}
             />
          )}
 
@@ -1055,7 +1023,6 @@ export default function App() {
               setSelectedMonth={setSelectedMonth}
               setSelectedYear={setSelectedYear}
               handleEditTransaction={handleEditTransaction}
-              readOnly={READ_ONLY_DATA}
               onOpenLedger={(type, category) => {
                 setFilterType(type);
                 setFilterCategory(category);

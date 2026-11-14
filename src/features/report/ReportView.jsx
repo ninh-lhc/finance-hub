@@ -102,7 +102,6 @@ export default function ReportView({
   setSelectedYear,
   onOpenLedger,
   handleEditTransaction,
-  readOnly = false,
 }) {
   const [selection, setSelection] = useState(null);
 
@@ -307,9 +306,7 @@ export default function ReportView({
                         <span className={`text-[12px] font-black tabular-nums ${selection.type === 'INCOME' ? 'text-[#05CD99]' : 'text-[#EE5D50]'}`}>
                           {selection.type === 'INCOME' ? '+' : '-'}{utils.formatVND(transaction.amount)}
                         </span>
-                        {!readOnly && (
-                          <button type="button" onClick={() => handleEditTransaction(transaction)} className="text-[10px] font-black text-[#4318FF] uppercase tracking-widest">Sửa</button>
-                        )}
+                        <button type="button" onClick={() => handleEditTransaction(transaction)} className="text-[10px] font-black text-[#4318FF] uppercase tracking-widest">Sửa</button>
                       </div>
                     </div>
                   ))}
