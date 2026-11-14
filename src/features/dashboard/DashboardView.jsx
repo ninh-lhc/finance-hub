@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   LayoutDashboard, Calendar, Eye, Wallet, ArrowUpRight, ArrowDownLeft, Landmark, BarChart3, Zap,
   PiggyBank, Target, ChevronLeft, PieChart, List, ArrowRightLeft,
@@ -126,11 +126,28 @@ function ColorStat({ tone, label, shortLabel, amount, compact, detail, shortDeta
 
 function SixMonthChart({ months, ready }) {
   const [active, setActive] = useState(null);
+  const frameRef = useRef(null);
+  const [plotHeight, setPlotHeight] = useState(230);
   const peak = Math.max(...months.map((month) => Math.max(month.income, month.expense)), 0);
   const scale = chartScale(peak);
   const width = 640;
-  const height = 230;
+  const height = plotHeight;
   const pad = { left: 46, right: 12, top: 12, bottom: 28 };
+  useEffect(() => {
+    const node = frameRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return undefined;
+    const update = () => {
+      const widthPx = node.clientWidth;
+      const heightPx = node.clientHeight;
+      if (!widthPx || !heightPx) return;
+      const next = Math.max(230, Math.round((width * heightPx) / widthPx));
+      setPlotHeight((current) => (current === next ? current : next));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
   const innerWidth = width - pad.left - pad.right;
   const innerHeight = height - pad.top - pad.bottom;
   const slot = innerWidth / Math.max(months.length, 1);
@@ -140,13 +157,14 @@ function SixMonthChart({ months, ready }) {
   const tipX = active == null ? 0 : ((pad.left + slot * active + slot / 2) / width) * 100;
 
   return (
-    <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100 min-w-0 h-full">
-      <h4 className="text-xs font-black text-[#1B2559] uppercase tracking-widest">Thu chi 6 tháng gần nhất</h4>
+    <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100 min-w-0 h-full flex flex-col">
+      <h4 className="text-xs font-black text-[#1B2559] uppercase tracking-widest shrink-0">Thu chi 6 tháng gần nhất</h4>
       {!ready ? (
         <p className="text-sm text-gray-400 py-12 text-center">Đang tổng hợp các tháng...</p>
       ) : (
-        <div className="relative mt-3" onPointerLeave={(event) => { if (event.pointerType !== 'touch') setActive(null); }}>
-          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" role="img" aria-label="Thu chi 6 tháng gần nhất">
+        <div className="relative mt-3 flex-1 min-h-[220px] flex flex-col" onPointerLeave={(event) => { if (event.pointerType !== 'touch') setActive(null); }}>
+          <div ref={frameRef} className="relative flex-1 min-h-[180px]">
+          <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 w-full h-full" role="img" aria-label="Thu chi 6 tháng gần nhất">
             {scale.ticks.map((tick) => {
               const y = base - (tick / scale.max) * innerHeight;
               return (
@@ -183,13 +201,14 @@ function SixMonthChart({ months, ready }) {
           {activeMonth && (
             <div
               className="absolute z-20 pointer-events-none rounded-lg bg-white border border-slate-200 shadow-lg px-3 py-2 min-w-[140px]"
-              style={{ left: `${tipX}%`, top: '16%', transform: tipX > 62 ? 'translate(calc(-100% - 8px), 0)' : 'translate(8px, 0)' }}
+              style={{ left: `${tipX}%`, top: '12%', transform: tipX > 62 ? 'translate(calc(-100% - 8px), 0)' : 'translate(8px, 0)' }}
             >
               <p className="text-xs font-semibold text-slate-800">{activeMonth.label}</p>
               <p className="text-[12px] mt-1" style={{ color: INCOME_COLOR }}>Thu: {utils.formatVND(activeMonth.income)}</p>
               <p className="text-[12px]" style={{ color: EXPENSE_COLOR }}>Chi: {utils.formatVND(activeMonth.expense)}</p>
             </div>
           )}
+          </div>
           <div className="flex items-center justify-center gap-4 mt-2 text-[13px] text-slate-600">
             <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: INCOME_COLOR }} />Thu</span>
             <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: EXPENSE_COLOR }} />Chi</span>
@@ -343,6 +362,7 @@ export default function DashboardView(props) {
   } = props;
 
   const [activeDay, setActiveDay] = useState(null);
+  const [selectedBudgetCategory, setSelectedBudgetCategory] = useState(null);
   const openReport = () => setActiveTab('report');
   const openGoalSettings = () => {
     setActiveTab('settings');
@@ -439,13 +459,29 @@ export default function DashboardView(props) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="min-w-0 h-full">
-          <div className="bg-[#111C44] rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 text-white shadow-xl border border-white/5 h-full">
+          <div className="bg-[#111C44] rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 text-white shadow-xl border border-white/5 h-full flex flex-col">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-[14px] bg-[#4318FF] flex items-center justify-center shadow-lg"><Zap size={20} fill="white" /></div>
               <h4 className="text-sm font-black uppercase tracking-widest text-white">Cố vấn dòng tiền</h4>
             </div>
-            <p className="text-xs text-gray-300 leading-relaxed font-medium mb-6 italic">&quot;{generateDashboardAdvice()}&quot;</p>
-            <ProgressBar value={logic.expense} max={logic.income || 100} color={logic.income > 0 && logic.expense / logic.income * 100 > 80 ? THEME.error : THEME.success} height="h-2" />
+            <p className="text-sm text-gray-200 leading-relaxed font-medium italic">&quot;{generateDashboardAdvice()}&quot;</p>
+            <div className="grid grid-cols-3 gap-3 mt-auto pt-6">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Thu</p>
+                <p className="text-sm font-black text-[#05CD99] tabular-nums mt-1">{compactVnd(logic.income)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Chi</p>
+                <p className="text-sm font-black text-[#FF938A] tabular-nums mt-1">{compactVnd(logic.expense)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Tỷ lệ chi</p>
+                <p className="text-sm font-black tabular-nums mt-1">{logic.income > 0 ? `${((logic.expense / logic.income) * 100).toFixed(0)}%` : '0%'}</p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <ProgressBar value={logic.expense} max={logic.income || 100} color={logic.income > 0 && logic.expense / logic.income * 100 > 80 ? THEME.error : THEME.success} height="h-2" />
+            </div>
           </div>
         </div>
 
@@ -543,7 +579,7 @@ export default function DashboardView(props) {
               {walletView === 'list' ? <PieChart size={16} /> : <List size={16} />}
             </button>
           </div>
-          <div className="min-h-[220px] relative">
+          <div className="flex-1 min-h-[220px] relative">
             {selectedWalletDetail ? (
               <div className="absolute inset-0 flex flex-col">
                 <button type="button" onClick={() => setSelectedWalletDetail(null)} className="min-h-11 text-[10px] font-black text-[#05CD99] uppercase tracking-widest flex items-center gap-1 mb-4 hover:opacity-70">
@@ -632,13 +668,34 @@ export default function DashboardView(props) {
           </div>
         </div>
 
-        <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-8 shadow-sm border border-gray-100 min-w-0 h-full">
+        <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-8 shadow-sm border border-gray-100 min-w-0 h-full flex flex-col">
+        {selectedBudgetCategory ? (
+          <div className="flex flex-col min-h-0 flex-1">
+            <button type="button" onClick={() => setSelectedBudgetCategory(null)} className="min-h-11 text-[10px] font-black text-[#4318FF] uppercase tracking-widest flex items-center gap-1 mb-4 self-start">
+              <ChevronLeft size={14} /> Quay lại · {selectedBudgetCategory}
+            </button>
+            <div className="space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+              {logic.monthData.filter((item) => item.type === 'EXPENSE' && item.category === selectedBudgetCategory).length === 0 ? (
+                <p className="text-xs font-bold text-gray-400">Không có khoản chi.</p>
+              ) : logic.monthData.filter((item) => item.type === 'EXPENSE' && item.category === selectedBudgetCategory).map((item) => (
+                <button key={item.id} type="button" onClick={() => handleEditTransaction(item)} className="w-full text-left border border-gray-50 rounded-xl bg-[#F8F9FA] p-3 min-h-11">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[11px] font-black text-[#1B2559] uppercase truncate">{item.note || item.category}</p>
+                    <span className="text-[11px] font-black text-[#EE5D50] shrink-0">-{utils.formatVND(item.amount)}</span>
+                  </div>
+                  <p className="text-[9px] font-bold text-gray-400 mt-1 uppercase">{utils.formatDisplayDate(item.date)} · {item.linkedWallet || item.wallet}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+        <>
         <h4 className="text-sm font-black text-[#1B2559] uppercase tracking-widest mb-5 sm:mb-8">Tiến độ Ngân sách T{selectedMonth + 1}</h4>
         <div className="grid grid-cols-1 gap-4 sm:gap-6">
           {logic.budgetProgress.map((item) => {
             const left = item.amount - item.currentSpent;
             return (
-              <div key={item.id} className="bg-[#F8F9FA] p-4 sm:p-5 rounded-[24px] border border-transparent hover:border-gray-200 transition-all min-w-0">
+              <button key={item.id} type="button" onClick={() => setSelectedBudgetCategory(item.category)} className="bg-[#F8F9FA] p-4 sm:p-5 rounded-[24px] border border-transparent hover:border-gray-200 transition-all min-w-0 text-left">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-2 mb-3">
                   <div className="min-w-0">
                     <p className="text-xs font-black text-[#1B2559] uppercase flex items-center gap-2 min-w-0">
@@ -655,7 +712,7 @@ export default function DashboardView(props) {
                   </div>
                 </div>
                 <ProgressBar value={item.currentSpent} max={item.amount} color={item.statusColor} height="h-2.5" />
-              </div>
+              </button>
             );
           })}
           {budgets.length === 0 && (
@@ -671,6 +728,8 @@ export default function DashboardView(props) {
             </div>
           )}
         </div>
+        </>
+        )}
         </div>
       </div>
     </div>
