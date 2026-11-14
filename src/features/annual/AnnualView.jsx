@@ -2,9 +2,7 @@ import {
   BarChart3, Loader2, Activity, ChevronLeft
 } from 'lucide-react';
 import utils from '../../utils/format.js';
-import { THEME } from '../../constants/theme.js';
 import DonutChart from '../../components/common/DonutChart.jsx';
-import ProgressBar from '../../components/common/ProgressBar.jsx';
 import { DeltaLabel } from '../dashboard/MonthComparisonPanel.jsx';
 import { buildAmountDelta, filterByYearMonth, summarizeCounted } from '../../logic/monthComparison.js';
 
@@ -87,50 +85,51 @@ export default function AnnualView(props) {
                   <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[32px] border border-gray-100"><Loader2 size={40} className="animate-spin text-[#4318FF] mb-4" /><p className="text-[10px] font-black uppercase">Đang tổng hợp...</p></div>
                ) : (
                   <>
-                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
-                        <div className="bg-[#111C44] p-5 sm:p-8 rounded-[24px] sm:rounded-[32px] text-white shadow-2xl overflow-hidden relative min-w-0">
-                           <div className="absolute top-0 right-0 w-24 h-24 bg-[#05CD99] blur-[50px] opacity-20"></div>
-                           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Tổng thu nhập</p>
-                           <h3 className="text-xl sm:text-3xl font-black text-[#05CD99] break-words">{utils.formatVND(logic.annualData.scopeIncome)}</h3>
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="tone-income rounded-2xl shadow-sm p-5 min-w-0 text-white">
+                           <p className="text-sm text-white">Tổng thu nhập</p>
+                           <h3 className="text-2xl font-semibold text-white break-words tabular-nums mt-2">{utils.formatVND(logic.annualData.scopeIncome)}</h3>
                            {previousYearReady && (
-                             <p className="mt-2"><DeltaLabel delta={buildAmountDelta(logic.annualData.scopeIncome, previousScope.income)} prefix={deltaPrefix} /></p>
+                             <p className="mt-2"><DeltaLabel light delta={buildAmountDelta(logic.annualData.scopeIncome, previousScope.income)} prefix={deltaPrefix} /></p>
                            )}
                         </div>
-                        <div className="bg-white p-5 sm:p-8 rounded-[24px] sm:rounded-[32px] shadow-xl border border-gray-100 min-w-0">
-                           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Tổng chi tiêu</p>
-                           <h3 className="text-xl sm:text-3xl font-black text-[#EE5D50] break-words">{utils.formatVND(logic.annualData.scopeExpense)}</h3>
+                        <div className="tone-expense rounded-2xl shadow-sm p-5 min-w-0 text-white">
+                           <p className="text-sm text-white">Tổng chi tiêu</p>
+                           <h3 className="text-2xl font-semibold text-white break-words tabular-nums mt-2">{utils.formatVND(logic.annualData.scopeExpense)}</h3>
                            {previousYearReady && (
-                             <p className="mt-2"><DeltaLabel delta={buildAmountDelta(logic.annualData.scopeExpense, previousScope.expense)} invert prefix={deltaPrefix} /></p>
+                             <p className="mt-2"><DeltaLabel light invert delta={buildAmountDelta(logic.annualData.scopeExpense, previousScope.expense)} prefix={deltaPrefix} /></p>
                            )}
-                           <div className="mt-4"><ProgressBar value={logic.annualData.scopeExpense} max={logic.annualData.scopeIncome} color={THEME.error} /></div>
+                           <div className="mt-4 h-1.5 rounded-full bg-white/25 overflow-hidden">
+                             <div className="h-full rounded-full bg-white" style={{ width: `${utils.calculateProgress(logic.annualData.scopeExpense, logic.annualData.scopeIncome)}%` }} />
+                           </div>
                         </div>
-                        <div className="bg-white p-5 sm:p-8 rounded-[24px] sm:rounded-[32px] shadow-xl border border-gray-100 relative overflow-hidden min-w-0">
-                           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Tích lũy trong kỳ</p>
-                           <h3 className="text-xl sm:text-3xl font-black text-[#4318FF] break-words">{utils.formatVND(logic.annualData.scopeSurplus)}</h3>
+                        <div className="tone-surplus rounded-2xl shadow-sm p-5 min-w-0 text-white">
+                           <p className="text-sm text-white">Tích lũy trong kỳ</p>
+                           <h3 className="text-2xl font-semibold text-white break-words tabular-nums mt-2">{utils.formatVND(logic.annualData.scopeSurplus)}</h3>
                            {previousYearReady && (
-                             <p className="mt-2"><DeltaLabel delta={buildAmountDelta(logic.annualData.scopeSurplus, previousScope.surplus)} prefix={deltaPrefix} /></p>
+                             <p className="mt-2"><DeltaLabel light delta={buildAmountDelta(logic.annualData.scopeSurplus, previousScope.surplus)} prefix={deltaPrefix} /></p>
                            )}
-                           <div className="mt-3 pt-3 border-t border-gray-50 flex flex-col gap-1 sm:flex-row sm:justify-between sm:items-center">
-                               <p className="text-[10px] font-black text-gray-400 uppercase">Tiết kiệm: {logic.annualData.scopeIncome > 0 ? (logic.annualData.scopeSurplus/logic.annualData.scopeIncome*100).toFixed(0) : 0}%</p>
-                               <p className="text-[10px] font-black text-gray-400 uppercase">Gốc đầu kỳ: <span className="text-[#1B2559]">{utils.formatVND(logic.annualData.scopeInitialBalance)}</span></p>
+                           <div className="mt-3 pt-3 border-t border-white/25 flex flex-col gap-1 sm:flex-row sm:justify-between sm:items-center">
+                               <p className="text-xs text-white">Tiết kiệm {logic.annualData.scopeIncome > 0 ? (logic.annualData.scopeSurplus/logic.annualData.scopeIncome*100).toFixed(0) : 0}%</p>
+                               <p className="text-xs text-white">Gốc đầu kỳ {utils.formatVND(logic.annualData.scopeInitialBalance)}</p>
                            </div>
                         </div>
                      </div>
 
-                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <button
                           type="button"
                           onClick={() => peak.index >= 0 && selectMonth(peak.index)}
-                          className="bg-white rounded-2xl border border-gray-100 px-4 py-3 text-left shadow-sm"
+                          className="tone-expense rounded-2xl shadow-sm p-5 text-left text-white"
                         >
-                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tháng chi nhiều nhất</p>
-                          <p className="text-sm font-black text-[#EE5D50] mt-1">
+                          <p className="text-sm text-white">Tháng chi nhiều nhất</p>
+                          <p className="text-2xl font-semibold text-white mt-2">
                             {peak.expense > 0 ? `T${peak.index + 1} · ${utils.formatVND(peak.expense)}` : 'Chưa có khoản chi'}
                           </p>
                         </button>
-                        <div className="bg-white rounded-2xl border border-gray-100 px-4 py-3 shadow-sm">
-                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Trung bình tháng</p>
-                          <p className="text-sm font-black text-[#1B2559] mt-1">{utils.formatVND(logic.annualData.avgMonthlyExpense)}</p>
+                        <div className="tone-average rounded-2xl shadow-sm p-5 text-white">
+                          <p className="text-sm text-white">Trung bình tháng</p>
+                          <p className="text-2xl font-semibold text-white mt-2 tabular-nums">{utils.formatVND(logic.annualData.avgMonthlyExpense)}</p>
                         </div>
                      </div>
 
