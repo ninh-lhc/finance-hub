@@ -3,6 +3,7 @@ import { AlertTriangle, ChevronLeft, PieChart } from 'lucide-react';
 import utils from '../../utils/format.js';
 import { DeltaLabel } from '../dashboard/MonthComparisonPanel.jsx';
 import { transactionsForCategory } from '../../logic/monthReport.js';
+import PeriodOverview from './PeriodOverview.jsx';
 
 function monthTag(month, year, selectedYear) {
   const label = `T${month + 1}`;
@@ -102,6 +103,8 @@ export default function ReportView({
   setSelectedYear,
   onOpenLedger,
   handleEditTransaction,
+  yearTransactions,
+  wallets,
 }) {
   const [selection, setSelection] = useState(null);
 
@@ -152,8 +155,8 @@ export default function ReportView({
             <PieChart size={24} />
           </div>
           <div className="min-w-0">
-            <h3 className="text-lg font-black text-[#1B2559] uppercase tracking-tighter italic">Báo cáo tháng</h3>
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Thu chi so với tháng trước và cùng kỳ</p>
+            <h3 className="text-lg font-black text-[#1B2559] uppercase tracking-tighter italic">Báo cáo thu chi</h3>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Theo kỳ, danh mục, ví và cùng kỳ</p>
           </div>
         </div>
         <div className="flex items-center gap-3 bg-[#F4F7FE] rounded-2xl px-5 py-3 border border-gray-100 shadow-inner w-full md:w-auto">
@@ -166,11 +169,17 @@ export default function ReportView({
         </div>
       </div>
 
-      {!report?.ready ? (
-        <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[32px] border border-gray-100">
-          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Đang tổng hợp báo cáo...</p>
-        </div>
-      ) : (
+      <PeriodOverview
+        key={selectedYear}
+        transactions={yearTransactions}
+        wallets={wallets}
+        selectedYear={selectedYear}
+        selectedMonth={selectedMonth}
+        ready={Boolean(report?.ready)}
+        handleEditTransaction={handleEditTransaction}
+      />
+
+      {report?.ready && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <SummaryCard

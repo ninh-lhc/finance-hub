@@ -1023,6 +1023,8 @@ export default function App() {
               setSelectedMonth={setSelectedMonth}
               setSelectedYear={setSelectedYear}
               handleEditTransaction={handleEditTransaction}
+              yearTransactions={annualTransactions}
+              wallets={wallets}
               onOpenLedger={(type, category) => {
                 setFilterType(type);
                 setFilterCategory(category);
