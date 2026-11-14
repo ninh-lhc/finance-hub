@@ -979,7 +979,6 @@ export default function App() {
               cancelEdit={cancelEdit}
               generateDashboardAdvice={generateDashboardAdvice}
               monthComparison={monthComparison}
-              comparisonReady={comparisonReady}
               setFilterType={setFilterType}
               setFilterCategory={setFilterCategory}
               setFilterWallet={setFilterWallet}
