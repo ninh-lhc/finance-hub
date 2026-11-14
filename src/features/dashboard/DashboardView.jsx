@@ -140,7 +140,7 @@ function SixMonthChart({ months, ready }) {
   const tipX = active == null ? 0 : ((pad.left + slot * active + slot / 2) / width) * 100;
 
   return (
-    <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100 min-w-0 self-start">
+    <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100 min-w-0 h-full">
       <h4 className="text-xs font-black text-[#1B2559] uppercase tracking-widest">Thu chi 6 tháng gần nhất</h4>
       {!ready ? (
         <p className="text-sm text-gray-400 py-12 text-center">Đang tổng hợp các tháng...</p>
@@ -234,7 +234,7 @@ function WeekPanel({ logic, selectedMonth, activeDay, setActiveDay, onEdit }) {
   ].filter(Boolean).join(' · ');
 
   return (
-    <div className="min-w-0 self-start bg-[#111C44] rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 text-white shadow-[0_20px_50px_-12px_rgba(17,28,68,0.2)]">
+    <div className="min-w-0 h-full bg-[#111C44] rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 text-white shadow-[0_20px_50px_-12px_rgba(17,28,68,0.2)]">
       <div className="bg-[#1C244B] p-4 sm:p-5 rounded-[24px] border border-white/5 relative overflow-hidden">
         <div className="flex flex-wrap justify-between items-center gap-3 mb-4 relative z-10">
           <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2 min-w-0">
@@ -437,9 +437,9 @@ export default function DashboardView(props) {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        <div className="min-w-0">
-          <div className="bg-[#111C44] rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 text-white shadow-xl border border-white/5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="min-w-0 h-full">
+          <div className="bg-[#111C44] rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 text-white shadow-xl border border-white/5 h-full">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-[14px] bg-[#4318FF] flex items-center justify-center shadow-lg"><Zap size={20} fill="white" /></div>
               <h4 className="text-sm font-black uppercase tracking-widest text-white">Cố vấn dòng tiền</h4>
@@ -450,7 +450,7 @@ export default function DashboardView(props) {
         </div>
 
         {logic.priorityGoal ? (
-            <div onClick={openGoalSettings} className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-7 shadow-sm border border-gray-100 w-full flex flex-col justify-between group cursor-pointer hover:shadow-md transition-all min-w-0">
+            <div onClick={openGoalSettings} className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-7 shadow-sm border border-gray-100 w-full h-full flex flex-col justify-between group cursor-pointer hover:shadow-md transition-all min-w-0">
               <div>
                 <div className="flex justify-between items-start mb-4">
                   <div>
@@ -480,7 +480,7 @@ export default function DashboardView(props) {
               </div>
             </div>
           ) : (
-            <div className="bg-[#F8F9FA] rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 border border-dashed border-gray-200 w-full shrink-0">
+            <div className="bg-[#F8F9FA] rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 border border-dashed border-gray-200 w-full h-full">
               <div className="flex flex-col items-center text-center">
                 <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-[#A3AED0] mb-3 border border-gray-100">
                   <Target size={22} strokeWidth={1.75} />
@@ -495,7 +495,7 @@ export default function DashboardView(props) {
           )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <WeekPanel
           logic={logic}
           selectedMonth={selectedMonth}
@@ -506,8 +506,8 @@ export default function DashboardView(props) {
         <SixMonthChart months={monthBars} ready={Boolean(comparisonReady)} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100 flex flex-col min-w-0 min-h-[320px] self-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100 flex flex-col min-w-0 min-h-[320px] h-full">
           <h4 className="text-xs font-black text-[#1B2559] uppercase tracking-widest mb-4 shrink-0">Phân bổ chi tiêu</h4>
           <div className="flex-1 min-h-[180px] relative">
             {!selectedExpenseCategory ? (
@@ -536,7 +536,7 @@ export default function DashboardView(props) {
             )}
           </div>
         </div>
-        <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100 flex flex-col min-w-0 self-start">
+        <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100 flex flex-col min-w-0 h-full">
           <div className="flex justify-between items-center mb-4 sm:mb-6 shrink-0">
             <h4 className="text-xs font-black text-[#1B2559] uppercase tracking-widest">Cơ cấu ví tiền</h4>
             <button type="button" onClick={() => setWalletView((view) => (view === 'list' ? 'chart' : 'list'))} className="min-w-11 min-h-11 bg-[#F4F7FE] rounded-xl text-[#4318FF] hover:bg-indigo-50 transition-colors inline-flex items-center justify-center" aria-label={walletView === 'list' ? 'Xem biểu đồ ví' : 'Xem danh sách ví'}>
@@ -598,8 +598,8 @@ export default function DashboardView(props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100 flex flex-col min-w-0 self-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100 flex flex-col min-w-0 h-full">
           <div className="flex justify-between items-center mb-4 sm:mb-6 shrink-0 gap-3">
             <h4 className="text-xs font-black text-[#1B2559] uppercase tracking-widest">Giao dịch mới nhất</h4>
             <button type="button" onClick={() => setActiveTab('transactions')} className="min-h-11 text-[9px] font-black text-[#4318FF] uppercase tracking-widest">Xem tất cả</button>
@@ -632,7 +632,7 @@ export default function DashboardView(props) {
           </div>
         </div>
 
-        <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-8 shadow-sm border border-gray-100 min-w-0 self-start">
+        <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-8 shadow-sm border border-gray-100 min-w-0 h-full">
         <h4 className="text-sm font-black text-[#1B2559] uppercase tracking-widest mb-5 sm:mb-8">Tiến độ Ngân sách T{selectedMonth + 1}</h4>
         <div className="grid grid-cols-1 gap-4 sm:gap-6">
           {logic.budgetProgress.map((item) => {

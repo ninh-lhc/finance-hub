@@ -118,7 +118,7 @@ export default function App() {
 
   const [selectedExpenseCategory, setSelectedExpenseCategory] = useState(null);
   const [, setExpandedTxId] = useState(null);
-  const [walletView, setWalletView] = useState('list'); 
+  const [walletView, setWalletView] = useState('chart'); 
   const [selectedWalletDetail, setSelectedWalletDetail] = useState(null);
   const [annualSelectedMonth, setAnnualSelectedMonth] = useState('ALL');
   const [annualSelectedExpenseCategory, setAnnualSelectedExpenseCategory] = useState(null);
