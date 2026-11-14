@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   LayoutDashboard, Calendar, Eye, Wallet, ArrowUpRight, ArrowDownLeft, Landmark, BarChart3, Zap,
-  PiggyBank, Target, ChevronLeft, PieChart, List, ArrowRightLeft,
+  PiggyBank, Target, ChevronLeft, ChevronRight, PieChart, List, ArrowRightLeft,
 } from 'lucide-react';
 import utils from '../../utils/format.js';
 import { THEME } from '../../constants/theme.js';
@@ -10,6 +10,15 @@ import ProgressBar from '../../components/common/ProgressBar.jsx';
 
 const INCOME_COLOR = '#16A34A';
 const EXPENSE_COLOR = '#DC2626';
+
+function advisorTone(income, expense) {
+  if (income <= 0 && expense <= 0) return { label: 'Chưa có số', color: '#A3AED0', fill: '#4318FF' };
+  if (income <= 0) return { label: 'Khẩn', color: '#FF938A', fill: '#EE5D50' };
+  const rate = (expense / income) * 100;
+  if (rate < 50) return { label: 'Khỏe', color: '#05CD99', fill: '#05CD99' };
+  if (rate <= 80) return { label: 'Ổn', color: '#FFB547', fill: '#E3940A' };
+  return { label: 'Khẩn', color: '#FF938A', fill: '#EE5D50' };
+}
 
 function compactVnd(amount) {
   const value = Number(amount) || 0;
@@ -381,6 +390,19 @@ export default function DashboardView(props) {
     .map((month) => ({ ...month, label: `T${month.month + 1}` }));
   const saveRate = logic.income > 0 ? ((logic.income - logic.expense) / logic.income) * 100 : 0;
   const expenseSlices = topExpenseSlices(logic.expenseChart);
+  const spendRate = logic.income > 0 ? (logic.expense / logic.income) * 100 : 0;
+  const advisor = advisorTone(logic.income, logic.expense);
+  const safeCap = logic.income * 0.8;
+  const overCap = logic.expense - safeCap;
+  const remaining = logic.income - logic.expense;
+  const topExpense = (logic.expenseChart || [])[0] || null;
+  const openTopExpense = () => {
+    if (!topExpense) return;
+    setSelectedExpenseCategory(topExpense.name);
+    window.requestAnimationFrame(() => {
+      document.getElementById('phan-bo-chi-tieu')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
   const incomeDetail = monthComparison?.ready ? deltaPhrase(monthComparison.incomeDelta) : 'Đang đối chiếu';
   const expenseDetail = monthComparison?.ready ? deltaPhrase(monthComparison.expenseDelta) : 'Đang đối chiếu';
   const fieldClass = 'bg-transparent text-xs font-black text-[#1B2559] outline-none cursor-pointer uppercase tracking-widest';
@@ -461,27 +483,50 @@ export default function DashboardView(props) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="min-w-0 h-full">
           <div className="bg-[#111C44] rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 text-white shadow-xl border border-white/5 h-full flex flex-col">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-[14px] bg-[#4318FF] flex items-center justify-center shadow-lg"><Zap size={20} fill="white" /></div>
-              <h4 className="text-sm font-black uppercase tracking-widest text-white">Cố vấn dòng tiền</h4>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-[14px] flex items-center justify-center shadow-lg shrink-0" style={{ background: advisor.fill }}><Zap size={20} fill="white" /></div>
+                <h4 className="text-sm font-black uppercase tracking-widest text-white truncate">Cố vấn dòng tiền</h4>
+              </div>
+              <span className="shrink-0 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest" style={{ background: `${advisor.color}22`, color: advisor.color }}>{advisor.label}</span>
             </div>
-            <p className="text-sm text-gray-200 leading-relaxed font-medium italic">&quot;{generateDashboardAdvice()}&quot;</p>
-            <div className="grid grid-cols-3 gap-3 mt-auto pt-6">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Thu</p>
-                <p className="text-sm font-black text-[#05CD99] tabular-nums mt-1">{compactVnd(logic.income)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Chi</p>
-                <p className="text-sm font-black text-[#FF938A] tabular-nums mt-1">{compactVnd(logic.expense)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Tỷ lệ chi</p>
-                <p className="text-sm font-black tabular-nums mt-1">{logic.income > 0 ? `${((logic.expense / logic.income) * 100).toFixed(0)}%` : '0%'}</p>
-              </div>
-            </div>
-            <div className="mt-4">
-              <ProgressBar value={logic.expense} max={logic.income || 100} color={logic.income > 0 && logic.expense / logic.income * 100 > 80 ? THEME.error : THEME.success} height="h-2" />
+            <p className="text-sm text-white leading-relaxed font-medium mt-4">&quot;{generateDashboardAdvice()}&quot;</p>
+            <div className="mt-auto pt-6">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/45">Còn lại trong tháng</p>
+              <p className="text-3xl font-black tabular-nums mt-1 tracking-tight" style={{ color: remaining >= 0 ? '#05CD99' : '#FF938A' }}>{compactVnd(remaining)}</p>
+              {logic.income > 0 ? (
+                <p className="text-[13px] text-white/70 mt-2 leading-5">
+                  Ngưỡng 80% là {compactVnd(safeCap)}. {overCap > 0 ? `Đang vượt ${compactVnd(overCap)}.` : overCap < 0 ? `Còn ${compactVnd(-overCap)} trước ngưỡng.` : 'Đúng ngưỡng 80%.'}
+                </p>
+              ) : logic.expense > 0 ? (
+                <p className="text-[13px] text-white/70 mt-2 leading-5">Chưa có thu trong tháng nên chưa có ngưỡng.</p>
+              ) : null}
+              {logic.income > 0 && (
+                <div className="mt-4">
+                  <div className="relative h-2.5">
+                    <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(spendRate, 100)}%`, background: advisor.fill }} />
+                    </div>
+                    <span className="absolute -top-1 h-4 w-0.5 rounded-full bg-white" style={{ left: '80%' }} />
+                  </div>
+                  <div className="flex justify-between mt-2 text-[10px] font-bold uppercase tracking-widest text-white/45">
+                    <span>Vạch trắng là ngưỡng 80%</span>
+                    <span className="tabular-nums" style={{ color: advisor.color }}>{spendRate.toFixed(0)}%</span>
+                  </div>
+                </div>
+              )}
+              {topExpense && (
+                <button type="button" onClick={openTopExpense} className="mt-4 w-full min-h-11 text-left rounded-2xl bg-white/5 hover:bg-white/10 px-4 py-3 flex items-center justify-between gap-3">
+                  <span className="min-w-0">
+                    <span className="block text-[10px] font-bold uppercase tracking-widest text-white/45">Khoản chi lớn nhất</span>
+                    <span className="block text-sm font-black mt-1 truncate">{topExpense.name}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1 shrink-0 text-sm font-black text-[#FF938A] tabular-nums">
+                    {compactVnd(topExpense.value)}
+                    <ChevronRight size={16} className="text-white/50" />
+                  </span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -544,7 +589,7 @@ export default function DashboardView(props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100 flex flex-col min-w-0 min-h-[320px] h-full">
+        <div id="phan-bo-chi-tieu" className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100 flex flex-col min-w-0 min-h-[320px] h-full">
           <h4 className="text-xs font-black text-[#1B2559] uppercase tracking-widest mb-4 shrink-0">Phân bổ chi tiêu</h4>
           <div className="flex-1 min-h-[180px] relative">
             {!selectedExpenseCategory ? (
