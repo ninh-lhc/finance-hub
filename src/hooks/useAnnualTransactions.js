@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getDocs } from 'firebase/firestore';
 
-const COMPARISON_TABS = new Set(['dashboard', 'transactions', 'annual']);
+const COMPARISON_TABS = new Set(['dashboard', 'transactions', 'annual', 'report']);
 
 export default function useAnnualTransactions({
   user,
@@ -15,9 +15,11 @@ export default function useAnnualTransactions({
   const [annualTransactions, setAnnualTransactions] = useState([]);
   const [previousBoundaryTransactions, setPreviousBoundaryTransactions] = useState([]);
   const [previousYearTransactions, setPreviousYearTransactions] = useState([]);
+  const [samePeriodTransactions, setSamePeriodTransactions] = useState([]);
   const [isFetchingAnnual, setIsFetchingAnnual] = useState(false);
   const [loadedKey, setLoadedKey] = useState(null);
   const [previousYearKey, setPreviousYearKey] = useState(null);
+  const [samePeriodKey, setSamePeriodKey] = useState(null);
   const loadedViewRef = useRef(null);
 
   useEffect(() => {
@@ -31,11 +33,14 @@ export default function useAnnualTransactions({
       if (!keepCurrentChart) {
         setIsFetchingAnnual(true);
         setPreviousYearKey(null);
+        setSamePeriodKey(null);
       }
       const allYearTx = [];
       let boundaryTx = [];
       let previousYearTx = [];
+      let samePeriodTx = [];
       const includePreviousYear = activeTab === 'annual';
+      const includeSamePeriod = activeTab === 'report';
       try {
         const promises = [];
         for (let month = 1; month <= 12; month += 1) {
@@ -49,15 +54,22 @@ export default function useAnnualTransactions({
             previousYearPromises.push(getDocs(getCollectionRef(colName)));
           }
         }
-        const [results, previousYearResults] = await Promise.all([
+        const samePeriodPromise = includeSamePeriod
+          ? getDocs(getCollectionRef(`transactions_${selectedYear - 1}_${String(selectedMonth + 1).padStart(2, '0')}`))
+          : Promise.resolve(null);
+        const [results, previousYearResults, samePeriodSnap] = await Promise.all([
           Promise.all(promises),
           Promise.all(previousYearPromises),
+          samePeriodPromise,
         ]);
         results.forEach((snap) => {
           snap.forEach((docSnap) => allYearTx.push({ id: docSnap.id, ...docSnap.data() }));
         });
         previousYearResults.forEach((snap) => {
           snap.forEach((docSnap) => previousYearTx.push({ id: docSnap.id, ...docSnap.data() }));
+        });
+        samePeriodSnap?.forEach((docSnap) => {
+          samePeriodTx.push({ id: docSnap.id, ...docSnap.data() });
         });
 
         if (selectedMonth === 0) {
@@ -71,9 +83,11 @@ export default function useAnnualTransactions({
           setAnnualTransactions(allYearTx);
           setPreviousBoundaryTransactions(boundaryTx);
           setPreviousYearTransactions(includePreviousYear ? previousYearTx : []);
+          setSamePeriodTransactions(includeSamePeriod ? samePeriodTx : []);
           loadedViewRef.current = viewKey;
           setLoadedKey(requestKey);
           setPreviousYearKey(includePreviousYear ? String(selectedYear) : null);
+          setSamePeriodKey(includeSamePeriod ? requestKey : null);
           setIsFetchingAnnual(false);
         }
       } catch (err) {
@@ -90,13 +104,18 @@ export default function useAnnualTransactions({
   const previousYearReady = activeTab === 'annual'
     && previousYearKey === String(selectedYear)
     && !isFetchingAnnual;
+  const samePeriodReady = activeTab === 'report'
+    && samePeriodKey === `${selectedYear}:${selectedMonth}`
+    && !isFetchingAnnual;
 
   return {
     annualTransactions,
     previousBoundaryTransactions,
     previousYearTransactions,
+    samePeriodTransactions,
     isFetchingAnnual,
     comparisonReady,
     previousYearReady,
+    samePeriodReady,
   };
 }

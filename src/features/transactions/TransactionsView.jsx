@@ -43,6 +43,7 @@ export default function TransactionsView(props) {
     handleEditTransaction,
     dbActions,
     monthComparison,
+    readOnly = false,
   } = props;
 
   const openPreviousMonth = () => {
@@ -86,10 +87,12 @@ export default function TransactionsView(props) {
                            <button onClick={handleDownloadSampleCSV} className="flex items-center justify-center gap-1.5 bg-white border border-gray-200 text-[#1B2559] px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 shadow-sm transition-all flex-shrink-0" title="Tải file Mẫu Excel">
                               <FileDown size={16}/> Mẫu
                            </button>
+                           {!readOnly && (
                            <label className="flex items-center justify-center gap-1.5 bg-[#4318FF] text-white px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 shadow-lg shadow-indigo-100 transition-all cursor-pointer flex-shrink-0" title="Nhập dữ liệu từ file Excel (CSV)">
                               {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <><Upload size={16}/> Nhập</>}
                               <input type="file" accept=".csv" className="hidden" onChange={handleImportCSV} disabled={isProcessing}/>
                            </label>
+                           )}
                            <button onClick={handleExportCSV} className="flex items-center justify-center gap-1.5 bg-[#1B2559] text-white px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-[#111C44] shadow-lg shadow-indigo-100 transition-all flex-shrink-0" title="Xuất dữ liệu">
                               <Download size={16}/> Xuất
                            </button>
@@ -169,10 +172,12 @@ export default function TransactionsView(props) {
                                  {t.type === 'INCOME' ? '+' : '-'}{utils.formatVND(t.amount)}
                               </span>
                            </div>
+                           {!readOnly && (
                            <div className="flex justify-end gap-2 mt-3">
                               <button type="button" onClick={() => handleEditTransaction(t)} className="p-2 text-[#4318FF] bg-white rounded-xl shadow-sm"><Edit2 size={14}/></button>
                               <button type="button" onClick={() => dbActions.deleteItem('transactions', t.id, t)} className="p-2 text-[#EE5D50] bg-white rounded-xl shadow-sm"><Trash2 size={14}/></button>
                            </div>
+                           )}
                         </div>
                         ))}
                       </div>
@@ -197,7 +202,7 @@ export default function TransactionsView(props) {
                                  <td colSpan={5} className="pt-5 pb-1 pl-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">{group.date ? utils.formatDisplayDate(group.date) : 'Không ngày'}</td>
                               </tr>
                               {group.items.map(t => (
-                              <tr key={t.id} onClick={() => handleEditTransaction(t)} className="hover:bg-gray-50/80 transition-all cursor-pointer">
+                              <tr key={t.id} onClick={() => { if (!readOnly) handleEditTransaction(t); }} className={`hover:bg-gray-50/80 transition-all ${readOnly ? '' : 'cursor-pointer'}`}>
                                  <td className="py-4 pl-4 font-black text-[#1B2559] uppercase tracking-tight text-sm">{t.note}</td>
                                  <td className="py-4 text-center">
                                     <button type="button" onClick={(event) => { event.stopPropagation(); applyCategoryFilter(t); }} className="px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border border-gray-100 bg-white shadow-sm" style={{ color: logic.getCategoryColor(t.category) }}>
@@ -211,10 +216,12 @@ export default function TransactionsView(props) {
                                     {t.type === 'INCOME' ? '+' : '-'}{utils.formatVND(t.amount)}
                                  </td>
                                  <td className="py-4 text-center" onClick={(event) => event.stopPropagation()}>
+                                    {!readOnly && (
                                     <div className="flex gap-1 justify-center">
                                        <button type="button" onClick={() => handleEditTransaction(t)} className="p-2 text-[#4318FF] bg-[#F4F7FE] hover:bg-white rounded-xl"><Edit2 size={14}/></button>
                                        <button type="button" onClick={() => dbActions.deleteItem('transactions', t.id, t)} className="p-2 text-[#EE5D50] bg-[#F4F7FE] hover:bg-white rounded-xl"><Trash2 size={14}/></button>
                                     </div>
+                                    )}
                                  </td>
                               </tr>
                               ))}
