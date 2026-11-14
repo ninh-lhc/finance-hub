@@ -2,6 +2,61 @@ import utils from '../utils/format.js';
 import { THEME, CHART_COLORS } from '../constants/theme.js';
 import { locksForWallet } from './planningEntities.js';
 
+function weekExpenseIdentity(transaction) {
+  return transaction.id || `${transaction.date}|${transaction.amount}|${transaction.category}|${transaction.note || ''}`;
+}
+
+function isCountedWeekExpense(transaction) {
+  return Boolean(transaction) && transaction.type === 'EXPENSE' && transaction.category !== 'Chuyển khoản đi';
+}
+
+function shiftDate(dateStr, days) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  const nextMonth = String(date.getMonth() + 1).padStart(2, '0');
+  const nextDay = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${nextMonth}-${nextDay}`;
+}
+
+function buildWeekInsight({ weeklyExpenses, isCurrentMonthView, sources }) {
+  const categoryTotals = {};
+  weeklyExpenses.forEach((bucket) => {
+    (bucket.items || []).forEach((transaction) => {
+      const name = transaction.category || 'Khác';
+      categoryTotals[name] = (categoryTotals[name] || 0) + Number(transaction.amount || 0);
+    });
+  });
+  const topCategories = Object.entries(categoryTotals)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3)
+    .map(([name, amount]) => ({ name, amount }));
+  const peak = weeklyExpenses.reduce((best, bucket) => (bucket.total > best.total ? bucket : best), weeklyExpenses[0] || { total: 0, label: '' });
+  let previousTotal = null;
+  if (isCurrentMonthView && weeklyExpenses[0]?.dateStr) {
+    const previousStart = shiftDate(weeklyExpenses[0].dateStr, -7);
+    const previousEnd = shiftDate(weeklyExpenses[0].dateStr, -1);
+    const seen = new Set();
+    previousTotal = 0;
+    sources.forEach((list) => {
+      (list || []).forEach((transaction) => {
+        if (!isCountedWeekExpense(transaction)) return;
+        const identity = weekExpenseIdentity(transaction);
+        if (seen.has(identity)) return;
+        seen.add(identity);
+        if (transaction.date >= previousStart && transaction.date <= previousEnd) {
+          previousTotal += Number(transaction.amount || 0);
+        }
+      });
+    });
+  }
+  return {
+    previousTotal,
+    topCategories,
+    peakLabel: peak.total > 0 ? peak.label : '',
+    peakTotal: peak.total || 0,
+  };
+}
 export const deriveFinanceLogic = ({
   transactions,
   annualTransactions,
@@ -96,17 +151,19 @@ export const deriveFinanceLogic = ({
           const dateStr = `${d.getFullYear()}-${m}-${dayStr}`;
           let dayName = utils.getDayOfWeekVN(dateStr);
           if (i === 6) dayName = 'Hôm nay';
-          return { dateStr, label: dayName, total: 0 };
+          return { dateStr, label: dayName, total: 0, items: [] };
       });
 
       const countedExpenseIds = new Set();
       const addWeekExpense = (transaction) => {
-          if (!transaction || transaction.type !== 'EXPENSE' || transaction.category === 'Chuyển khoản đi') return;
-          const identity = transaction.id || `${transaction.date}|${transaction.amount}|${transaction.category}|${transaction.note || ''}`;
+          if (!isCountedWeekExpense(transaction)) return;
+          const identity = weekExpenseIdentity(transaction);
           if (countedExpenseIds.has(identity)) return;
           countedExpenseIds.add(identity);
           const dayObj = weeklyExpenses.find(d => d.dateStr === transaction.date);
-          if (dayObj) dayObj.total += Number(transaction.amount || 0);
+          if (!dayObj) return;
+          dayObj.total += Number(transaction.amount || 0);
+          dayObj.items.push(transaction);
       };
       monthData.forEach(addWeekExpense);
       (annualTransactions || []).forEach(addWeekExpense);
@@ -114,22 +171,26 @@ export const deriveFinanceLogic = ({
   } else {
       // NẾU LÀ THÁNG TRONG QUÁ KHỨ: Hiển thị tổng hợp theo 4 Tuần
       weeklyExpenses = [
-          { label: 'Tuần 1', start: 1, end: 7, total: 0 },
-          { label: 'Tuần 2', start: 8, end: 14, total: 0 },
-          { label: 'Tuần 3', start: 15, end: 21, total: 0 },
-          { label: 'Tuần 4', start: 22, end: 31, total: 0 }
+          { label: 'Tuần 1', start: 1, end: 7, total: 0, items: [] },
+          { label: 'Tuần 2', start: 8, end: 14, total: 0, items: [] },
+          { label: 'Tuần 3', start: 15, end: 21, total: 0, items: [] },
+          { label: 'Tuần 4', start: 22, end: 31, total: 0, items: [] }
       ];
 
       monthData.forEach(t => {
-          if (t.type === 'EXPENSE' && t.category !== 'Chuyển khoản đi' && t.date) {
-              const day = parseInt(t.date.split('-')[2], 10);
-              if (day >= 1 && day <= 7) weeklyExpenses[0].total += Number(t.amount || 0);
-              else if (day >= 8 && day <= 14) weeklyExpenses[1].total += Number(t.amount || 0);
-              else if (day >= 15 && day <= 21) weeklyExpenses[2].total += Number(t.amount || 0);
-              else if (day >= 22) weeklyExpenses[3].total += Number(t.amount || 0);
-          }
+          if (!isCountedWeekExpense(t) || !t.date) return;
+          const day = parseInt(t.date.split('-')[2], 10);
+          const bucket = day <= 7 ? weeklyExpenses[0] : day <= 14 ? weeklyExpenses[1] : day <= 21 ? weeklyExpenses[2] : weeklyExpenses[3];
+          bucket.total += Number(t.amount || 0);
+          bucket.items.push(t);
       });
   }
+
+  const weekInsight = buildWeekInsight({
+    weeklyExpenses,
+    isCurrentMonthView,
+    sources: [monthData, annualTransactions, boundaryTransactions],
+  });
 
   const maxWeeklyExpense = Math.max(...weeklyExpenses.map(d => d.total), 1);
   const topWallet = walletChart.length > 0 ? walletChart.reduce((prev, curr) => (prev.value > curr.value) ? prev : curr) : { name: 'Chưa có ví', value: 0 };
@@ -181,7 +242,7 @@ export const deriveFinanceLogic = ({
 
   return {
     monthData, yearSummary, income, expense, globalBal, expenseChart, walletChart, fullWalletList, priorityGoal, budgetProgress,
-    weeklyExpenses, maxWeeklyExpense, topWallet, getCategoryColor, getWalletColor,
+    weeklyExpenses, maxWeeklyExpense, weekInsight, topWallet, getCategoryColor, getWalletColor,
     totalGoalsAmount, spendableBal, isCurrentMonthView,
     annualData: { scopeIncome, scopeExpense, scopeSurplus, scopeInitialBalance, scopeExpenseChart, avgMonthlyExpense, scopeTransactions: annualScopeData }
   };

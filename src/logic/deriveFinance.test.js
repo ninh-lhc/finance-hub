@@ -273,6 +273,25 @@ describe('deriveFinanceLogic', () => {
       expect(result.weeklyExpenses.find((day) => day.dateStr === '2025-12-31').total).toBe(30);
       expect(result.weeklyExpenses.find((day) => day.dateStr === '2026-01-02').total).toBe(10);
     });
+
+    it('keeps the day transactions and the previous 7 day total', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(FIXED_NOW);
+
+      const repeated = tx({ id: 'xe', type: 'EXPENSE', category: 'Đi lại', amount: 40, date: '2026-06-08', note: 'xe' });
+      const result = deriveFinanceLogic(createBaseInput({
+        transactions: [
+          tx({ id: 'com', type: 'EXPENSE', category: 'Ăn uống', amount: 100, date: '2026-06-15', note: 'cơm' }),
+          repeated,
+        ],
+        annualTransactions: [repeated],
+      }));
+
+      expect(result.weeklyExpenses.at(-1).items).toHaveLength(1);
+      expect(result.weeklyExpenses.at(-1).items[0].note).toBe('cơm');
+      expect(result.weekInsight.previousTotal).toBe(40);
+      expect(result.weekInsight.topCategories[0].name).toBe('Ăn uống');
+    });
   });
 });
 

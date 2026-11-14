@@ -61,6 +61,14 @@ function chartScale(peak) {
   };
 }
 
+function weekCompareText(current, previous) {
+  if (previous == null) return '';
+  if (previous <= 0) return current > 0 ? 'Mới so với 7 ngày trước' : '';
+  const percent = Math.round(((current - previous) / previous) * 100);
+  if (percent === 0) return 'Bằng 7 ngày trước';
+  return percent > 0 ? `Cao hơn 7 ngày trước ${percent}%` : `Thấp hơn 7 ngày trước ${Math.abs(percent)}%`;
+}
+
 function topExpenseSlices(chart) {
   const rows = chart || [];
   if (rows.length <= 5) return rows;
@@ -192,6 +200,100 @@ function SixMonthChart({ months, ready }) {
   );
 }
 
+function dayCategory(items) {
+  const totals = {};
+  (items || []).forEach((item) => {
+    const name = item.category || 'Khác';
+    totals[name] = (totals[name] || 0) + Number(item.amount || 0);
+  });
+  const top = Object.entries(totals).sort((left, right) => right[1] - left[1])[0];
+  return top ? top[0] : '';
+}
+
+function WeekPanel({ logic, selectedMonth, activeDay, setActiveDay, onEdit }) {
+  const days = logic.weeklyExpenses || [];
+  const insight = logic.weekInsight || { previousTotal: null, topCategories: [], peakLabel: '', peakTotal: 0 };
+  const currentTotal = days.reduce((sum, day) => sum + day.total, 0);
+  const selectedIndex = Math.min(activeDay ?? Math.max(days.length - 1, 0), Math.max(days.length - 1, 0));
+  const selected = days[selectedIndex];
+  const selectedItems = [...(selected?.items || [])].sort((left, right) => Number(right.amount || 0) - Number(left.amount || 0));
+  const compare = weekCompareText(currentTotal, insight.previousTotal);
+  const summary = [
+    insight.peakTotal > 0 ? `Cao nhất ${insight.peakLabel} · ${compactVnd(insight.peakTotal)}` : '',
+    compare,
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <div className="lg:col-span-8 bg-[#111C44] rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 text-white shadow-[0_20px_50px_-12px_rgba(17,28,68,0.2)]">
+      <div className="bg-[#1C244B] p-4 sm:p-5 rounded-[24px] border border-white/5 relative overflow-hidden">
+        <div className="flex flex-wrap justify-between items-center gap-3 mb-4 relative z-10">
+          <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2 min-w-0">
+            <BarChart3 size={14} className="text-[#EE5D50] shrink-0" />
+            <span className="leading-snug">{logic.isCurrentMonthView ? 'Chi tiêu 7 ngày qua (Thực tế)' : `Chi tiêu các tuần T${selectedMonth + 1} (Lịch sử)`}</span>
+          </h4>
+          <div className="flex items-center gap-2 bg-[#EE5D50]/10 px-3 py-1.5 rounded-full border border-[#EE5D50]/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#EE5D50]" />
+            <span className="text-[10px] font-black text-[#EE5D50]">{utils.formatVND(currentTotal)}</span>
+          </div>
+        </div>
+        {summary && <p className="text-[11px] text-gray-300 mb-3 relative z-10">{summary}</p>}
+        <div className="relative flex items-end justify-between h-[132px] gap-2 sm:gap-4 z-10 px-1">
+          <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20">
+            <div className="w-full border-t border-dashed border-gray-500" />
+            <div className="w-full border-t border-dashed border-gray-500" />
+            <div className="w-full border-t border-dashed border-gray-500" />
+          </div>
+          {days.map((item, index) => (
+            <button
+              key={item.dateStr || item.label}
+              type="button"
+              onClick={() => setActiveDay(index)}
+              className={`flex-1 flex flex-col items-center justify-end h-full relative z-10 bg-transparent border-0 min-w-0 ${index === selectedIndex ? 'opacity-100' : 'opacity-80'}`}
+            >
+              <span className="text-[8px] font-black text-gray-300 mb-1 tabular-nums">{compactVnd(item.total)}</span>
+              <span className={`w-full max-w-[36px] flex-1 bg-[#111C44] rounded-full relative flex justify-end flex-col overflow-hidden shadow-inner border ${index === selectedIndex ? 'border-white/40' : 'border-white/5'}`}>
+                <span className="w-full bg-gradient-to-t from-[#EE5D50] to-[#FF938A] rounded-full" style={{ height: `${logic.maxWeeklyExpense > 0 ? (item.total / logic.maxWeeklyExpense) * 100 : 0}%`, minHeight: item.total > 0 ? '8px' : '0' }} />
+              </span>
+              <span className={`text-[9px] font-bold mt-3 uppercase tracking-tighter ${index === selectedIndex ? 'text-[#05CD99]' : 'text-gray-500'}`}>{item.label}</span>
+            </button>
+          ))}
+        </div>
+        {insight.topCategories.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-4 relative z-10">
+            {insight.topCategories.map((category) => (
+              <span key={category.name} className="text-[11px] text-white/80 bg-white/10 rounded-full px-2.5 py-1">{category.name} · {compactVnd(category.amount)}</span>
+            ))}
+          </div>
+        )}
+        {selected && (
+          <div className="mt-4 pt-4 border-t border-white/10 relative z-10">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-sm font-semibold">{selected.label}{dayCategory(selectedItems) ? ` · ${dayCategory(selectedItems)}` : ''}</p>
+              <p className="text-sm font-semibold text-[#FF938A] tabular-nums">{utils.formatVND(selected.total)}</p>
+            </div>
+            {selectedItems.length === 0 ? (
+              <p className="text-xs text-gray-400 mt-2">Không có khoản chi.</p>
+            ) : (
+              <div className="mt-2 space-y-1">
+                {selectedItems.slice(0, 3).map((item) => (
+                  <button key={item.id || `${item.date}-${item.amount}-${item.note}`} type="button" onClick={() => onEdit(item)} className="w-full flex items-center justify-between gap-3 text-left bg-transparent border-0 min-h-11 px-0">
+                    <span className="min-w-0">
+                      <span className="block text-sm text-white truncate">{item.note || item.category}</span>
+                      <span className="block text-[11px] text-gray-400 truncate">{item.linkedWallet || item.wallet}</span>
+                    </span>
+                    <span className="text-sm tabular-nums shrink-0">-{utils.formatVND(item.amount)}</span>
+                  </button>
+                ))}
+                {selectedItems.length > 3 && <p className="text-[11px] text-gray-400">và {selectedItems.length - 3} khoản nữa</p>}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardView(props) {
   const {
     logic,
@@ -218,6 +320,7 @@ export default function DashboardView(props) {
     comparisonReady,
   } = props;
 
+  const [activeDay, setActiveDay] = useState(null);
   const openReport = () => setActiveTab('report');
   const openGoalSettings = () => {
     setActiveTab('settings');
@@ -312,39 +415,14 @@ export default function DashboardView(props) {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-8 bg-[#111C44] rounded-[24px] sm:rounded-[32px] p-5 sm:p-8 text-white shadow-[0_20px_50px_-12px_rgba(17,28,68,0.2)]">
-          <div className="bg-[#1C244B] p-4 sm:p-6 rounded-[24px] sm:rounded-[32px] border border-white/5 relative overflow-hidden">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[#EE5D50] blur-[120px] opacity-[0.03] pointer-events-none" />
-            <div className="flex flex-wrap justify-between items-center gap-3 mb-5 sm:mb-8 relative z-10">
-              <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2 min-w-0">
-                <BarChart3 size={14} className="text-[#EE5D50] shrink-0" />
-                <span className="leading-snug">{logic.isCurrentMonthView ? 'Chi tiêu 7 ngày qua' : `Chi tiêu các tuần T${selectedMonth + 1}`}</span>
-                <span className="text-[8px] opacity-70 shrink-0">({logic.isCurrentMonthView ? 'Thực tế' : 'Lịch sử'})</span>
-              </h4>
-              <div className="flex items-center gap-2 bg-[#EE5D50]/10 px-3 py-1.5 rounded-full border border-[#EE5D50]/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#EE5D50] animate-pulse" />
-                <span className="text-[10px] font-black text-[#EE5D50]">{utils.formatVND(logic.weeklyExpenses.reduce((sum, item) => sum + item.total, 0))}</span>
-              </div>
-            </div>
-            <div className="relative flex items-end justify-between h-[132px] gap-2 sm:gap-4 mt-2 z-10 px-2">
-              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20">
-                <div className="w-full border-t border-dashed border-gray-500" />
-                <div className="w-full border-t border-dashed border-gray-500" />
-                <div className="w-full border-t border-dashed border-gray-500" />
-              </div>
-              {logic.weeklyExpenses.map((item, index) => (
-                <div key={item.dateStr || item.label} title={utils.formatVND(item.total)} className="flex-1 flex flex-col items-center justify-end h-full group relative z-10">
-                  <span className="text-[8px] font-black text-gray-300 mb-1 tabular-nums">{compactVnd(item.total)}</span>
-                  <div className="w-full max-w-[36px] flex-1 bg-[#111C44] rounded-full group-hover:bg-[#15204c] transition-colors relative flex justify-end flex-col overflow-hidden shadow-inner border border-white/5">
-                    <div className="w-full bg-gradient-to-t from-[#EE5D50] to-[#FF938A] rounded-full transition-all duration-1000 ease-out group-hover:brightness-110 shadow-[0_0_15px_rgba(238,93,80,0.5)]" style={{ height: `${logic.maxWeeklyExpense > 0 ? (item.total / logic.maxWeeklyExpense) * 100 : 0}%`, minHeight: item.total > 0 ? '8px' : '0' }} />
-                  </div>
-                  <span className={`text-[9px] font-bold mt-3 uppercase tracking-tighter transition-colors ${index === logic.weeklyExpenses.length - 1 && logic.isCurrentMonthView ? 'text-[#05CD99]' : 'text-gray-500 group-hover:text-gray-300'}`}>{item.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:items-start">
+        <WeekPanel
+          logic={logic}
+          selectedMonth={selectedMonth}
+          activeDay={activeDay}
+          setActiveDay={setActiveDay}
+          onEdit={handleEditTransaction}
+        />
 
         <div className="lg:col-span-4 flex flex-col gap-6 min-w-0">
           <div className="bg-[#111C44] rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 text-white shadow-xl border border-white/5 lg:flex-1 flex flex-col justify-center">
