@@ -226,7 +226,7 @@ export default function TransactionsView(props) {
                            </div>
                            <div className="flex justify-end gap-2 mt-3">
                               <button type="button" onClick={() => handleEditTransaction(t)} className="p-2 text-[#4318FF] bg-white rounded-xl shadow-sm"><Edit2 size={14}/></button>
-                              <button type="button" onClick={() => dbActions.deleteItem('transactions', t.id, t)} className="p-2 text-[#EE5D50] bg-white rounded-xl shadow-sm"><Trash2 size={14}/></button>
+                              <button type="button" aria-label={`Xóa ${t.note || t.category}`} onClick={() => dbActions.deleteItem('transactions', t.id, t)} className="p-2 text-[#EE5D50] bg-white rounded-xl shadow-sm"><Trash2 size={14}/></button>
                            </div>
                         </div>
                         ))}
@@ -268,7 +268,7 @@ export default function TransactionsView(props) {
                                  <td className="py-4 text-center" onClick={(event) => event.stopPropagation()}>
                                     <div className="flex gap-1 justify-center">
                                        <button type="button" onClick={() => handleEditTransaction(t)} className="p-2 text-[#4318FF] bg-[#F4F7FE] hover:bg-white rounded-xl"><Edit2 size={14}/></button>
-                                       <button type="button" onClick={() => dbActions.deleteItem('transactions', t.id, t)} className="p-2 text-[#EE5D50] bg-[#F4F7FE] hover:bg-white rounded-xl"><Trash2 size={14}/></button>
+                                       <button type="button" aria-label={`Xóa ${t.note || t.category}`} onClick={() => dbActions.deleteItem('transactions', t.id, t)} className="p-2 text-[#EE5D50] bg-[#F4F7FE] hover:bg-white rounded-xl"><Trash2 size={14}/></button>
                                     </div>
                                  </td>
                               </tr>

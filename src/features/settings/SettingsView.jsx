@@ -154,7 +154,7 @@ export default function SettingsView(props) {
               {budgets.map(b => (
                 <div key={b.id} className="p-6 bg-[#F8F9FA] rounded-[24px] flex justify-between items-center border border-transparent hover:border-indigo-100">
                   <div className="space-y-1"><p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{b.category}</p><p className="font-black text-[#1B2559] text-base">{utils.formatVND(b.amount)}</p></div>
-                  <div className="flex gap-2"><button onClick={() => { setEditingId(b.id); setSettingsForm({...settingsForm, budgetCategory: b.category, budgetAmount: b.amount}); }} className="text-gray-400 hover:text-[#4318FF]"><Edit2 size={16}/></button><button onClick={() => dbActions.deleteItem('budgets', b.id)} className="text-gray-400 hover:text-[#EE5D50]"><Trash2 size={16}/></button></div>
+                  <div className="flex gap-2"><button onClick={() => { setEditingId(b.id); setSettingsForm({...settingsForm, budgetCategory: b.category, budgetAmount: b.amount}); }} className="text-gray-400 hover:text-[#4318FF]"><Edit2 size={16}/></button><button type="button" aria-label={`Xóa hạn mức ${b.category}`} onClick={() => dbActions.deleteItem('budgets', b.id)} className="text-gray-400 hover:text-[#EE5D50]"><Trash2 size={16}/></button></div>
                 </div>
               ))}
             </div>
@@ -249,7 +249,7 @@ export default function SettingsView(props) {
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => { setEditingId(g.id); setSettingsForm({...settingsForm, goalName: g.name, goalAmount: g.target, goalCurrentAmount: g.amount, goalWallet: g.wallet || ''}); }} className="p-3 bg-white rounded-2xl text-gray-400 hover:text-[#4318FF] shadow-sm"><Edit2 size={18}/></button>
-                    <button onClick={() => dbActions.deleteItem('goals', g.id)} className="p-3 bg-white rounded-2xl text-gray-400 hover:text-[#EE5D50] shadow-sm"><Trash2 size={18}/></button>
+                    <button type="button" aria-label={`Xóa mục tiêu ${g.name}`} onClick={() => dbActions.deleteItem('goals', g.id)} className="p-3 bg-white rounded-2xl text-gray-400 hover:text-[#EE5D50] shadow-sm"><Trash2 size={18}/></button>
                   </div>
                 </div>
               ))}

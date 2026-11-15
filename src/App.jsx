@@ -23,6 +23,7 @@ import { deriveFinanceLogic, deriveTransactionView } from './logic/deriveFinance
 import { buildDataSourceDiagnostics } from './logic/dataSourceDiagnostics.js';
 import { buildMonthComparison, filterByYearMonth, previousPeriod } from './logic/monthComparison.js';
 import { buildMonthReport } from './logic/monthReport.js';
+import { deleteConfirmMessage } from './logic/deleteConfirm.js';
 import {
   parseFinanceCsv,
   serializeFinanceCsv,
@@ -567,6 +568,13 @@ export default function App() {
     
     deleteItem: async (col, id, txObj) => {
       if (isProcessing) return;
+      const item = col === 'budgets'
+        ? (budgets || []).find((entry) => entry.id === id)
+        : col === 'goals'
+          ? (goals || []).find((entry) => entry.id === id)
+          : null;
+      const confirmMessage = deleteConfirmMessage({ collection: col, transaction: txObj, item });
+      if (confirmMessage && !window.confirm(confirmMessage)) return;
       setIsProcessing(true);
       try {
           let actualCol = col;
