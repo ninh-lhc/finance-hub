@@ -54,6 +54,31 @@ function shareRows(totals, total) {
     .sort((left, right) => right.amount - left.amount || left.name.localeCompare(right.name, 'vi'));
 }
 
+function drillRow(transaction, amount) {
+  return {
+    id: transaction?.id,
+    date: transaction?.date || '',
+    note: transaction?.note || '',
+    category: transaction?.category || 'Khác',
+    wallet: transactionWallet(transaction),
+    amount: Number(amount || 0),
+    transaction,
+  };
+}
+
+function groupDrillRows(rows, keyOf) {
+  const groups = {};
+  rows.forEach((row) => {
+    const key = keyOf(row);
+    groups[key] = groups[key] || [];
+    groups[key].push(row);
+  });
+  Object.values(groups).forEach((list) => {
+    list.sort((left, right) => String(right.date).localeCompare(String(left.date)) || right.amount - left.amount);
+  });
+  return groups;
+}
+
 function totalsBy(transactions, predicate, keyOf) {
   const totals = {};
   (transactions || []).filter(predicate).forEach((transaction) => {
@@ -101,6 +126,7 @@ export function buildPeriodReport({
   });
   const monthCount = Math.max(months.length, 1);
   const dayCount = inclusiveDayCount(range.from, range.to);
+  const flow = listFlowItems(period, goals);
   const personalExpenses = period.filter((transaction) => isSalaryExpense(transaction, goals));
   const personalIncome = period.filter((transaction) => isCountedIncome(transaction) && transaction.category !== 'Thu nợ/Hoàn ứng');
   const expenseCategories = shareRows(
@@ -127,6 +153,24 @@ export function buildPeriodReport({
       return Math.max(0, raw - funded);
     }),
   }));
+  const fundedOnTransaction = new Map();
+  (flow.spends || []).forEach((item) => {
+    fundedOnTransaction.set(item.transaction, (fundedOnTransaction.get(item.transaction) || 0) + item.amount);
+  });
+  const expenseRows = personalExpenses.flatMap((transaction) => {
+    const amount = Number(transaction.amount || 0) - (fundedOnTransaction.get(transaction) || 0);
+    return amount > 0 ? [drillRow(transaction, amount)] : [];
+  });
+  const incomeRows = personalIncome.map((transaction) => drillRow(transaction, transaction.amount));
+  const drilldown = {
+    expense: groupDrillRows(expenseRows, (row) => row.category),
+    income: groupDrillRows(incomeRows, (row) => row.category),
+    wallet: groupDrillRows(expenseRows, (row) => row.wallet),
+  };
+  if (summary.commission > 0) {
+    drilldown.income['Hoa hồng'] = flow.reimbursements.map((item) => drillRow(item.transaction, item.amount));
+  }
+
   const topExpenses = personalExpenses
     .slice()
     .sort((left, right) => Number(right.amount || 0) - Number(left.amount || 0)
@@ -164,6 +208,7 @@ export function buildPeriodReport({
     maxTrend: Math.max(...trends.flatMap((trend) => trend.points), 1),
     topExpenses,
     picture: summary,
-    flow: listFlowItems(period, goals),
+    flow,
+    drilldown,
   };
 }

@@ -98,17 +98,23 @@ function StatCard({ label, value, detail, toneClass }) {
   );
 }
 
-function ShareRows({ rows }) {
+function ShareRows({ rows, selectedName, onSelect }) {
   const scale = rows[0]?.amount || 1;
   if (rows.length === 0) {
     return <p className="text-sm text-slate-400">Chưa có khoản nào trong kỳ này.</p>;
   }
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       {rows.map((row, index) => {
         const color = CHART_COLORS[index % CHART_COLORS.length];
+        const selected = selectedName === row.name;
         return (
-          <div key={row.name} className="flex gap-3 min-w-0">
+          <button
+            key={row.name}
+            type="button"
+            onClick={() => onSelect(row.name)}
+            className={`w-full flex gap-3 min-w-0 text-left border-0 rounded-xl px-2 py-2 ${selected ? 'bg-[#F4F7FE]' : 'bg-transparent'}`}
+          >
             <Mark name={row.name} color={color} />
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline justify-between gap-3">
@@ -122,18 +128,56 @@ function ShareRows({ rows }) {
                 <div className="h-full rounded-full" style={{ width: `${Math.max((row.amount / scale) * 100, row.amount > 0 ? 2 : 0)}%`, background: color }} />
               </div>
             </div>
-          </div>
+          </button>
         );
       })}
     </div>
   );
 }
 
-function ShareList({ title, rows }) {
+function ShareList({ title, rows, selectedName, onSelect }) {
   return (
     <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6 min-w-0 h-full">
       <h3 className="text-base font-semibold text-slate-800 mb-5">{title}</h3>
-      <ShareRows rows={rows} />
+      <ShareRows rows={rows} selectedName={selectedName} onSelect={onSelect} />
+    </section>
+  );
+}
+
+function CategoryTransactions({ picked, rows, onClose, onOpen }) {
+  const incoming = picked.kind === 'income';
+  return (
+    <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <h3 className="text-base font-semibold text-[#1B2559] truncate">{picked.name}</h3>
+        <button type="button" onClick={onClose} className="text-xs font-bold text-[#4318FF] bg-transparent border-0 shrink-0">Đóng</button>
+      </div>
+      <p className="text-xs text-slate-400 mb-3">
+        {rows.length} khoản
+        {picked.name === 'Hoa hồng' ? ' · Hoa hồng là phần Thu nợ/Hoàn ứng dư hơn Chi hộ' : ''}
+      </p>
+      {rows.length === 0 ? (
+        <p className="text-sm text-slate-400">Kỳ này không có giao dịch trong mục này.</p>
+      ) : (
+        <div className="divide-y divide-slate-100">
+          {rows.map((item) => (
+            <button
+              key={item.id || `${item.date}-${item.amount}-${item.note}`}
+              type="button"
+              onClick={() => onOpen(item.transaction)}
+              className="w-full flex items-center gap-3 py-3 text-left bg-transparent border-0"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-[#1B2559] truncate">{item.note || item.category}</p>
+                <p className="text-xs text-slate-400 mt-0.5 truncate">{utils.formatDisplayDate(item.date)} · {item.wallet}{picked.kind === 'wallet' && item.category ? ` · ${item.category}` : ''}</p>
+              </div>
+              <span className={`text-sm font-semibold tabular-nums shrink-0 ${incoming ? 'text-[#157A45]' : 'expense-ink text-[#C2413C]'}`}>
+                {incoming ? '+' : '-'}{utils.formatVND(item.amount)}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -362,6 +406,7 @@ export default function PeriodOverview({
     to: '',
     wallet: 'ALL',
   });
+  const [picked, setPicked] = useState(null);
 
   const yearStart = `${selectedYear}-01-01`;
   const yearEnd = `${selectedYear}-12-31`;
@@ -448,15 +493,36 @@ export default function PeriodOverview({
           </section>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
-            <ShareList title="Chi theo danh mục" rows={period.expenseCategories} />
+            <ShareList
+              title="Chi theo danh mục"
+              rows={period.expenseCategories}
+              selectedName={picked?.kind === 'expense' ? picked.name : null}
+              onSelect={(name) => setPicked((current) => current?.kind === 'expense' && current.name === name ? null : { kind: 'expense', name })}
+            />
             <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6 min-w-0 h-full flex flex-col">
               <h3 className="text-base font-semibold text-slate-800 mb-5">Thu theo danh mục</h3>
-              <ShareRows rows={period.incomeCategories} />
+              <ShareRows
+                rows={period.incomeCategories}
+                selectedName={picked?.kind === 'income' ? picked.name : null}
+                onSelect={(name) => setPicked((current) => current?.kind === 'income' && current.name === name ? null : { kind: 'income', name })}
+              />
               <div className="my-6 border-t border-slate-100" />
               <h3 className="text-base font-semibold text-slate-800 mb-5">Chi theo ví</h3>
-              <ShareRows rows={period.walletExpenses} />
+              <ShareRows
+                rows={period.walletExpenses}
+                selectedName={picked?.kind === 'wallet' ? picked.name : null}
+                onSelect={(name) => setPicked((current) => current?.kind === 'wallet' && current.name === name ? null : { kind: 'wallet', name })}
+              />
             </section>
           </div>
+          {picked && (
+            <CategoryTransactions
+              picked={picked}
+              rows={period.drilldown?.[picked.kind]?.[picked.name] || []}
+              onClose={() => setPicked(null)}
+              onOpen={handleEditTransaction}
+            />
+          )}
 
           <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 sm:p-6">
             <h3 className="text-base font-semibold text-slate-800 mb-2">10 khoản chi lớn nhất</h3>

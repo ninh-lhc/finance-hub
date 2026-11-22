@@ -46,6 +46,9 @@ describe('buildPeriodReport', () => {
     expect(report.averageMonthlyExpense).toBe(30);
     expect(report.monthly.map((month) => month.expense)).toEqual([70, 0, 0, 0, 80]);
     expect(report.expenseCategories.map((item) => item.name)).toEqual(['Mua sắm', 'Nhà ở', 'Ăn uống']);
+    expect(report.drilldown.expense['Mua sắm'].map((item) => item.id)).toEqual(['shop']);
+    expect(report.drilldown.income['Lương'].map((item) => item.amount)).toEqual([100]);
+    expect(report.drilldown.wallet['Ví điện tử'].map((item) => item.id)).toEqual(['shop']);
     expect(report.incomeCategories[0]).toMatchObject({ name: 'Lương', amount: 100 });
     expect(report.walletExpenses.find((item) => item.name === 'Ví điện tử').amount).toBe(80);
     expect(report.topExpenses[0]).toMatchObject({ id: 'shop', amount: 80, wallet: 'Ví điện tử' });
