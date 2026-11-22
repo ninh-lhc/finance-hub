@@ -1,4 +1,4 @@
-import { addDoc, updateDoc, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { addDoc, updateDoc, deleteDoc, getDocs, writeBatch, doc, increment } from 'firebase/firestore';
 import { db } from '../firebase/config.js';
 import { getTransactionMonthCollectionNames } from '../../logic/walletCategoryEntities.js';
 import { goalLinkDetachPatch } from '../../logic/goalMovement.js';
@@ -64,4 +64,28 @@ export async function deleteBudgetFromFirestore({ getDocRef, id }) {
 
 export async function deleteGoalFromFirestore({ getDocRef, id }) {
   await deleteDoc(getDocRef('goals', id));
+}
+
+export async function lockFundRepayment({
+  getCollectionRef,
+  getDocRef,
+  goalId,
+  amount,
+  debtYear,
+  debtMonth,
+  payDate,
+  kind,
+}) {
+  const batch = writeBatch(db);
+  batch.update(getDocRef('goals', goalId), { amount: increment(Number(amount || 0)) });
+  batch.set(doc(getCollectionRef('fundRepayments')), {
+    goalId,
+    amount: Number(amount || 0),
+    debtYear,
+    debtMonth,
+    payDate,
+    kind,
+    createdAt: new Date().toISOString(),
+  });
+  await batch.commit();
 }

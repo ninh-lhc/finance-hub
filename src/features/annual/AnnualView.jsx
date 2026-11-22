@@ -4,7 +4,9 @@ import {
 import utils from '../../utils/format.js';
 import DonutChart from '../../components/common/DonutChart.jsx';
 import { DeltaLabel } from '../dashboard/MonthComparisonPanel.jsx';
-import { buildAmountDelta, filterByYearMonth, summarizeCounted } from '../../logic/monthComparison.js';
+import { buildAmountDelta, filterByYearMonth } from '../../logic/monthComparison.js';
+import { buildSalaryPicture, repaymentTotal } from '../../logic/salaryPicture.js';
+import SalaryNotes from '../dashboard/SalaryNotes.jsx';
 
 export default function AnnualView(props) {
   const {
@@ -21,6 +23,8 @@ export default function AnnualView(props) {
     handleEditTransaction,
     previousYearTransactions,
     previousYearReady,
+    goals = [],
+    fundRepayments = [],
   } = props;
 
   const peak = logic.yearSummary.reduce((best, month, index) => (
@@ -28,11 +32,18 @@ export default function AnnualView(props) {
   ), { expense: 0, index: -1 });
   const maxBar = Math.max(...logic.yearSummary.map((month) => Math.max(month.income, month.expense)), 1);
   const compareMonth = annualSelectedMonth === 'ALL' ? null : annualSelectedMonth;
-  const previousScope = summarizeCounted(
-    compareMonth == null
+  const previousScope = buildSalaryPicture({
+    transactions: compareMonth == null
       ? previousYearTransactions
       : filterByYearMonth(previousYearTransactions, selectedYear - 1, compareMonth),
-  );
+    goals,
+    repaid: repaymentTotal(
+      fundRepayments,
+      compareMonth == null
+        ? { year: selectedYear - 1 }
+        : { year: selectedYear - 1, month: compareMonth },
+    ),
+  });
   const deltaPrefix = compareMonth == null
     ? `so với ${selectedYear - 1}`
     : `so với T${compareMonth + 1}/${selectedYear - 1}`;
@@ -115,6 +126,7 @@ export default function AnnualView(props) {
                            </div>
                         </div>
                      </div>
+                     <SalaryNotes picture={logic.annualData.picture} />
 
                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <button

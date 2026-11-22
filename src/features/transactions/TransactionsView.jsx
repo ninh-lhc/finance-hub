@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import utils from '../../utils/format.js';
 import { DeltaLabel } from '../dashboard/MonthComparisonPanel.jsx';
+import SalaryNotes from '../dashboard/SalaryNotes.jsx';
 
 function monthBounds(year, month) {
   const start = `${year}-${String(month + 1).padStart(2, '0')}-01`;
@@ -161,6 +162,7 @@ export default function TransactionsView(props) {
                       </div>
                     </div>
                   )}
+                  {monthComparison?.ready && <SalaryNotes picture={monthComparison.picture} />}
 
                   <div className="mb-8 space-y-3">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">

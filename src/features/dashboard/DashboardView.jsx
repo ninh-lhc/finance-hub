@@ -7,6 +7,7 @@ import utils from '../../utils/format.js';
 import { THEME } from '../../constants/theme.js';
 import DonutChart from '../../components/common/DonutChart.jsx';
 import ProgressBar from '../../components/common/ProgressBar.jsx';
+import SalaryNotes from './SalaryNotes.jsx';
 
 const INCOME_COLOR = '#16A34A';
 const EXPENSE_COLOR = '#DC2626';
@@ -393,13 +394,14 @@ export default function DashboardView(props) {
   const monthBars = (logic.yearSummary || [])
     .slice(Math.max(0, selectedMonth - 5), selectedMonth + 1)
     .map((month) => ({ ...month, label: `T${month.month + 1}` }));
-  const saveRate = logic.income > 0 ? ((logic.income - logic.expense) / logic.income) * 100 : 0;
+  const surplus = logic.salaryPicture?.surplus ?? (logic.income - logic.expense);
+  const saveRate = logic.income > 0 ? (surplus / logic.income) * 100 : 0;
   const expenseSlices = topExpenseSlices(logic.expenseChart);
   const spendRate = logic.income > 0 ? (logic.expense / logic.income) * 100 : 0;
   const advisor = advisorTone(logic.income, logic.expense);
   const safeCap = logic.income * 0.8;
   const overCap = logic.expense - safeCap;
-  const remaining = logic.income - logic.expense;
+  const remaining = surplus;
   const topExpense = (logic.expenseChart || [])[0] || null;
   const openTopExpense = () => {
     if (!topExpense) return;
@@ -481,14 +483,15 @@ export default function DashboardView(props) {
           tone="bg-[#E3940A]"
           label="Tích lũy"
           shortLabel="Tích lũy"
-          amount={utils.formatVND(logic.income - logic.expense)}
-          compact={compactVnd(logic.income - logic.expense)}
+          amount={utils.formatVND(surplus)}
+          compact={compactVnd(surplus)}
           detail={surplusDetail}
           shortDetail={monthComparison?.ready ? deltaPhrase(monthComparison.surplusDelta, true) : `${saveRate.toFixed(0)}%`}
           icon={<Landmark size={18} className="text-white/90 shrink-0" />}
           onClick={openReport}
         />
       </div>
+      <SalaryNotes picture={logic.salaryPicture} />
 
       <div className={goalDone ? 'space-y-4' : 'grid grid-cols-1 lg:grid-cols-2 gap-6'}>
         <div className={goalDone ? 'min-w-0' : 'min-w-0 h-full'}>

@@ -1,3 +1,5 @@
+import { buildSalaryPicture, repaymentTotal, unpaidFundOffers } from './salaryPicture.js';
+
 const OPENING_BALANCE = 'Số dư đầu kỳ';
 const TRANSFER_IN = 'Chuyển khoản đến';
 const TRANSFER_OUT = 'Chuyển khoản đi';
@@ -72,12 +74,31 @@ export function buildMonthComparison({
   selectedYear,
   selectedMonth,
   ready = false,
+  goals = [],
+  repayments = [],
 }) {
   const previous = previousPeriod(selectedYear, selectedMonth);
-  const income = sumAmounts(currentTransactions, isCountedIncome);
-  const expense = sumAmounts(currentTransactions, isCountedExpense);
-  const previousIncome = sumAmounts(previousTransactions, isCountedIncome);
-  const previousExpense = sumAmounts(previousTransactions, isCountedExpense);
+  const currentPicture = buildSalaryPicture({
+    transactions: currentTransactions,
+    goals,
+    repaid: repaymentTotal(repayments, { year: selectedYear, month: selectedMonth }),
+  });
+  const previousPicture = buildSalaryPicture({
+    transactions: previousTransactions,
+    goals,
+    repaid: repaymentTotal(repayments, { year: previous.year, month: previous.month }),
+  });
+  currentPicture.outstandingBorrow = unpaidFundOffers({
+    transactions: previousTransactions,
+    goals,
+    repayments,
+    year: previous.year,
+    month: previous.month,
+  }).reduce((sum, item) => sum + item.amount, 0);
+  const income = currentPicture.income;
+  const expense = currentPicture.expense;
+  const previousIncome = previousPicture.income;
+  const previousExpense = previousPicture.expense;
 
   const monthlyExpenses = Array.from({ length: 12 }, (_, month) => (
     sumAmounts(filterByYearMonth(yearTransactions, selectedYear, month), isCountedExpense)
@@ -111,13 +132,14 @@ export function buildMonthComparison({
     previousYear: previous.year,
     income,
     expense,
-    surplus: income - expense,
+    surplus: currentPicture.surplus,
     previousIncome,
     previousExpense,
-    previousSurplus: previousIncome - previousExpense,
+    previousSurplus: previousPicture.surplus,
     incomeDelta: buildAmountDelta(income, previousIncome),
     expenseDelta: buildAmountDelta(expense, previousExpense),
-    surplusDelta: buildAmountDelta(income - expense, previousIncome - previousExpense),
+    surplusDelta: buildAmountDelta(currentPicture.surplus, previousPicture.surplus),
+    picture: currentPicture,
     monthlyExpenses,
     maxMonthlyExpense: Math.max(...monthlyExpenses, 1),
     categories,

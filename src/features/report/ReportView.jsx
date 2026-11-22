@@ -108,6 +108,8 @@ export default function ReportView({
   wallets,
   budgets = [],
   onOpenBudgets,
+  goals = [],
+  fundRepayments = [],
 }) {
   const [selection, setSelection] = useState(null);
 
@@ -180,6 +182,8 @@ export default function ReportView({
         selectedMonth={selectedMonth}
         ready={Boolean(report?.ready)}
         handleEditTransaction={handleEditTransaction}
+        goals={goals}
+        fundRepayments={fundRepayments}
         afterStats={(
           <BudgetSnapshot
             key={`${selectedYear}-${selectedMonth}`}

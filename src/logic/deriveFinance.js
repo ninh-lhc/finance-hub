@@ -1,6 +1,7 @@
 import utils from '../utils/format.js';
 import { THEME, CHART_COLORS } from '../constants/theme.js';
-import { isCountedExpense, isCountedIncome } from './monthComparison.js';
+import { filterByYearMonth, isCountedExpense, isCountedIncome, previousPeriod } from './monthComparison.js';
+import { buildSalaryPicture, isSalaryExpense, repaymentTotal, unpaidFundOffers } from './salaryPicture.js';
 import { locksForWallet } from './planningEntities.js';
 
 function weekExpenseIdentity(transaction) {
@@ -66,6 +67,7 @@ export const deriveFinanceLogic = ({
   annualSelectedMonth,
   goals,
   budgets,
+  fundRepayments = [],
 }) => {
   const getCategoryColor = (catName) => {
     if (!catName || typeof catName !== 'string') return '#A3AED0';
@@ -97,14 +99,32 @@ export const deriveFinanceLogic = ({
      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
   });
 
-  const income = monthData.filter(t => t.type === 'INCOME' && t.category !== 'Chuyển khoản đến' && t.category !== 'Số dư đầu kỳ').reduce((s, t) => s + Number(t.amount || 0), 0);
-  const expense = monthData.filter(t => t.type === 'EXPENSE' && t.category !== 'Chuyển khoản đi').reduce((s, t) => s + Number(t.amount || 0), 0);
+  const salaryPicture = buildSalaryPicture({
+    transactions: monthData,
+    goals,
+    repaid: repaymentTotal(fundRepayments, { year: selectedYear, month: selectedMonth }),
+  });
+  const previous = previousPeriod(selectedYear, selectedMonth);
+  const previousTransactions = selectedMonth === 0
+    ? boundaryTransactions
+    : filterByYearMonth(annualTransactions, previous.year, previous.month);
+  salaryPicture.outstandingBorrow = unpaidFundOffers({
+    transactions: previousTransactions,
+    goals,
+    repayments: fundRepayments,
+    year: previous.year,
+    month: previous.month,
+  }).reduce((sum, item) => sum + item.amount, 0);
+  const income = salaryPicture.income;
+  const expense = salaryPicture.expense;
 
   // ĐÃ SỬA: Chỉ tính tổng tiền của những ví đang hiện hữu (Bỏ qua các ví đã bị xóa)
   const globalBal = (wallets || []).reduce((s, w) => s + Number(walletBalances[w] || 0), 0);
 
   const expenseCats = {};
-  monthData.filter(t => t.type === 'EXPENSE' && t.category !== 'Chuyển khoản đi').forEach(t => expenseCats[t.category] = (expenseCats[t.category] || 0) + Number(t.amount || 0));
+  monthData.filter((transaction) => isSalaryExpense(transaction, goals)).forEach((transaction) => {
+    expenseCats[transaction.category] = (expenseCats[transaction.category] || 0) + Number(transaction.amount || 0);
+  });
   const expenseChart = Object.entries(expenseCats).sort((a,b) => b[1] - a[1]).map(([name, value]) => ({ name, value, color: getCategoryColor(name) }));
 
   const fullWalletList = (wallets || []).map((w) => {
@@ -215,9 +235,12 @@ export const deriveFinanceLogic = ({
           const [y, m] = t.date.split('-');
           return parseInt(m) - 1 === i && parseInt(y) === selectedYear;
       });
-      const inc = mTrans.filter(t => t.type === 'INCOME' && t.category !== 'Chuyển khoản đến' && t.category !== 'Số dư đầu kỳ').reduce((s,t) => s + Number(t.amount || 0), 0);
-      const exp = mTrans.filter(t => t.type === 'EXPENSE' && t.category !== 'Chuyển khoản đi').reduce((s,t) => s + Number(t.amount || 0), 0);
-      return { month: i, income: inc, expense: exp, surplus: inc - exp };
+      const picture = buildSalaryPicture({
+        transactions: mTrans,
+        goals,
+        repaid: repaymentTotal(fundRepayments, { year: selectedYear, month: i }),
+      });
+      return { month: i, income: picture.income, expense: picture.expense, surplus: picture.surplus };
   });
 
   const yearlyTotalExpense = yearSummary.reduce((s, m) => s + m.expense, 0);
@@ -234,15 +257,25 @@ export const deriveFinanceLogic = ({
       return true;
   });
 
-  const scopeIncome = annualScopeData.filter(t => t.type === 'INCOME' && t.category !== 'Chuyển khoản đến' && t.category !== 'Số dư đầu kỳ').reduce((s, t) => s + Number(t.amount || 0), 0);
-  const scopeExpense = annualScopeData.filter(t => t.type === 'EXPENSE' && t.category !== 'Chuyển khoản đi').reduce((s, t) => s + Number(t.amount || 0), 0);
-  const scopeSurplus = scopeIncome - scopeExpense;
+  const scopePicture = buildSalaryPicture({
+    transactions: annualScopeData,
+    goals,
+    repaid: repaymentTotal(
+      fundRepayments,
+      annualSelectedMonth === 'ALL'
+        ? { year: selectedYear }
+        : { year: selectedYear, month: Number(annualSelectedMonth) },
+    ),
+  });
+  const scopeIncome = scopePicture.income;
+  const scopeExpense = scopePicture.expense;
+  const scopeSurplus = scopePicture.surplus;
 
   // TÍNH TOÁN LƯỢNG TIỀN GỐC BAN ĐẦU ĐỂ GIẢI THÍCH SỰ CHÊNH LỆCH
   const scopeInitialBalance = annualScopeData.filter(t => t.type === 'INCOME' && t.category === 'Số dư đầu kỳ').reduce((s, t) => s + Number(t.amount || 0), 0);
 
   const scopeExpenseCats = {};
-  annualScopeData.filter(t => t.type === 'EXPENSE' && t.category !== 'Chuyển khoản đi').forEach(t => {
+  annualScopeData.filter((transaction) => isSalaryExpense(transaction, goals)).forEach((t) => {
       scopeExpenseCats[t.category] = (scopeExpenseCats[t.category] || 0) + Number(t.amount || 0);
   });
   const scopeExpenseChart = Object.entries(scopeExpenseCats).sort((a,b) => b[1] - a[1]).map(([name, value]) => ({ name, value, color: getCategoryColor(name) }));
@@ -258,7 +291,8 @@ export const deriveFinanceLogic = ({
     monthData, yearSummary, income, expense, globalBal, expenseChart, walletChart, fullWalletList, priorityGoal, budgetProgress,
     weeklyExpenses, maxWeeklyExpense, weekInsight, topWallet, getCategoryColor, getWalletColor,
     totalGoalsAmount, spendableBal, isCurrentMonthView,
-    annualData: { scopeIncome, scopeExpense, scopeSurplus, scopeInitialBalance, scopeExpenseChart, avgMonthlyExpense, scopeTransactions: annualScopeData }
+    salaryPicture,
+    annualData: { scopeIncome, scopeExpense, scopeSurplus, scopeInitialBalance, scopeExpenseChart, avgMonthlyExpense, scopeTransactions: annualScopeData, picture: scopePicture }
   };
 };
 

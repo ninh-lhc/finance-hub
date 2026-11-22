@@ -53,7 +53,9 @@ import {
   saveGoalToFirestore,
   deleteBudgetFromFirestore,
   deleteGoalFromFirestore,
+  lockFundRepayment,
 } from './services/finance/planningService.js';
+import { unpaidFundOffers, unpaidHelpedLocks } from './logic/salaryPicture.js';
 import { isCategoryFormReady, hasCategoryNameConflict, hasWalletNameConflict, normalizeCategoryName, normalizeWalletName, canDeleteCategory, canDeleteWallet, canRenameOpeningBalanceCategory } from './logic/walletCategoryEntities.js';
 import {
   saveWalletToFirestore,
@@ -93,6 +95,84 @@ function goalSaveError(result) {
 // ==========================================
 // MAIN APP COMPONENT
 // ==========================================
+function repaymentPlan(offers, cap) {
+  let remaining = Number(cap || 0);
+  return [...offers]
+    .sort((left, right) => right.amount - left.amount)
+    .map((offer) => {
+      const amount = Math.min(offer.amount, remaining);
+      remaining -= amount;
+      return amount > 0 ? { ...offer, amount } : null;
+    })
+    .filter(Boolean);
+}
+
+async function offerFundAdjustment({ payload, goals, fundRepayments, getCollectionRef, getDocRef }) {
+  const date = String(payload.date || '');
+  const year = Number(date.slice(0, 4));
+  const month = Number(date.slice(5, 7)) - 1;
+  if (!year || month < 0) return;
+
+  if (payload.category === 'Lương') {
+    const previous = previousPeriod(year, month);
+    const snap = await getDocs(getCollectionRef(`transactions_${previous.year}_${String(previous.month + 1).padStart(2, '0')}`));
+    const previousTransactions = snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+    const plan = repaymentPlan(unpaidFundOffers({
+      transactions: previousTransactions,
+      goals,
+      repayments: fundRepayments,
+      year: previous.year,
+      month: previous.month,
+    }), payload.amount);
+    const amount = plan.reduce((sum, item) => sum + item.amount, 0);
+    if (amount <= 0) return;
+    const accepted = window.confirm(`Tháng trước mượn quỹ khẩn cấp ${utils.formatVND(amount)}. Trả từ khoản lương này?`);
+    if (!accepted) return;
+    for (const item of plan) {
+      await lockFundRepayment({
+        getCollectionRef,
+        getDocRef,
+        goalId: item.goalId,
+        amount: item.amount,
+        debtYear: previous.year,
+        debtMonth: previous.month,
+        payDate: date,
+        kind: 'borrow',
+      });
+    }
+    return;
+  }
+
+  if (payload.category !== 'Thu nợ/Hoàn ứng') return;
+  const years = [year - 1, year];
+  const snaps = await Promise.all(years.flatMap((itemYear) => (
+    Array.from({ length: 12 }, (_, index) => (
+      getDocs(getCollectionRef(`transactions_${itemYear}_${String(index + 1).padStart(2, '0')}`))
+    ))
+  )));
+  const known = snaps.flatMap((snap) => snap.docs.map((item) => ({ id: item.id, ...item.data() })));
+  const plan = repaymentPlan(
+    unpaidHelpedLocks({ transactions: known, goals, repayments: fundRepayments }),
+    payload.amount,
+  );
+  const amount = plan.reduce((sum, item) => sum + item.amount, 0);
+  if (amount <= 0) return;
+  const accepted = window.confirm(`Chi hộ lấy từ quỹ khẩn cấp ${utils.formatVND(amount)}. Khóa số này trở lại quỹ?`);
+  if (!accepted) return;
+  for (const item of plan) {
+    await lockFundRepayment({
+      getCollectionRef,
+      getDocRef,
+      goalId: item.goalId,
+      amount: item.amount,
+      debtYear: year,
+      debtMonth: month,
+      payDate: date,
+      kind: 'helped',
+    });
+  }
+}
+
 export default function App() {
   const { user, authInitialized } = useAuthUser();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -136,7 +216,7 @@ export default function App() {
   const [annualRefreshTick, setAnnualRefreshTick] = useState(0);
 
   const { categories, wallets, walletBalances } = useFinanceSettings({ user, getDocRef, syncCode });
-  const { transactions, goals, budgets } = useMonthlyFinanceData({
+  const { transactions, goals, budgets, fundRepayments } = useMonthlyFinanceData({
     user,
     syncCode,
     selectedYear,
@@ -293,8 +373,9 @@ export default function App() {
         annualSelectedMonth,
         goals,
         budgets,
+        fundRepayments,
       }),
-    [transactions, annualTransactions, previousBoundaryTransactions, walletBalances, selectedMonth, selectedYear, wallets, categories, annualSelectedMonth, goals, budgets],
+    [transactions, annualTransactions, previousBoundaryTransactions, walletBalances, selectedMonth, selectedYear, wallets, categories, annualSelectedMonth, goals, budgets, fundRepayments],
   );
 
   const monthComparison = useMemo(() => {
@@ -309,6 +390,8 @@ export default function App() {
       selectedYear,
       selectedMonth,
       ready: comparisonReady,
+      goals,
+      repayments: fundRepayments,
     });
   }, [
     transactions,
@@ -317,6 +400,8 @@ export default function App() {
     selectedYear,
     selectedMonth,
     comparisonReady,
+    goals,
+    fundRepayments,
   ]);
 
   const monthReport = useMemo(() => {
@@ -332,11 +417,15 @@ export default function App() {
       selectedMonth,
       ready: comparisonReady,
       samePeriodReady,
+      goals,
+      repayments: fundRepayments,
     });
   }, [
     transactions,
     annualTransactions,
     previousBoundaryTransactions,
+    goals,
+    fundRepayments,
     samePeriodTransactions,
     selectedYear,
     selectedMonth,
@@ -554,6 +643,20 @@ export default function App() {
          else { payload.createdAt = new Date().toISOString(); await addDoc(getCollectionRef(colName), payload); }
       }
       
+      if (modalType === 'TRANSACTION' && !editingTxId && payload.type === 'INCOME') {
+        try {
+          await offerFundAdjustment({
+            payload,
+            goals,
+            fundRepayments,
+            getCollectionRef,
+            getDocRef,
+          });
+        } catch (error) {
+          console.error(error);
+          showToast('Đã lưu giao dịch, chưa khóa được quỹ', 'warning');
+        }
+      }
       showToast('Đã lưu thành công!', 'success');
       handleCloseModal();
       setAnnualRefreshTick(v => v + 1);
@@ -1041,6 +1144,8 @@ export default function App() {
               yearTransactions={annualTransactions}
               wallets={wallets}
               budgets={budgets}
+              goals={goals}
+              fundRepayments={fundRepayments}
               onOpenBudgets={() => {
                 setActiveTab('settings');
                 setActiveSettingTab('budget');
@@ -1071,6 +1176,8 @@ export default function App() {
               handleEditTransaction={handleEditTransaction}
               previousYearTransactions={previousYearTransactions}
               previousYearReady={previousYearReady}
+              goals={goals}
+              fundRepayments={fundRepayments}
             />
          )}
 

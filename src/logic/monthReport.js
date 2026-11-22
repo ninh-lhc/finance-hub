@@ -4,8 +4,8 @@ import {
   isCountedExpense,
   isCountedIncome,
   previousPeriod,
-  summarizeCounted,
 } from './monthComparison.js';
+import { buildSalaryPicture, repaymentTotal } from './salaryPicture.js';
 
 const INCOME_DROP_PERCENT = 15;
 const EXPENSE_JUMP_PERCENT = 25;
@@ -225,12 +225,19 @@ export function buildMonthReport({
   selectedMonth,
   ready = false,
   samePeriodReady = false,
+  goals = [],
+  repayments = [],
 }) {
   const previous = previousPeriod(selectedYear, selectedMonth);
-  const current = summarizeCounted(currentTransactions);
-  const previousSummary = summarizeCounted(previousTransactions);
+  const asPicture = (list, year, month) => buildSalaryPicture({
+    transactions: list,
+    goals,
+    repaid: repaymentTotal(repayments, { year, month }),
+  });
+  const current = asPicture(currentTransactions, selectedYear, selectedMonth);
+  const previousSummary = asPicture(previousTransactions, previous.year, previous.month);
   const comparableSamePeriod = samePeriodReady ? samePeriodTransactions : [];
-  const samePeriod = summarizeCounted(comparableSamePeriod);
+  const samePeriod = asPicture(comparableSamePeriod, selectedYear - 1, selectedMonth);
 
   const expenseCategories = mergeCategories(
     expenseByCategory(currentTransactions),

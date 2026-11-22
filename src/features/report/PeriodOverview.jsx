@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import utils from '../../utils/format.js';
 import { CHART_COLORS } from '../../constants/theme.js';
+import SalaryNotes from '../dashboard/SalaryNotes.jsx';
 import { buildPeriodReport } from '../../logic/periodReport.js';
 
 const INCOME_COLOR = '#16A34A';
@@ -351,6 +352,8 @@ export default function PeriodOverview({
   ready,
   handleEditTransaction,
   afterStats = null,
+  goals = [],
+  fundRepayments = [],
 }) {
   const [filter, setFilter] = useState({
     preset: 'year',
@@ -378,6 +381,8 @@ export default function PeriodOverview({
     from: range.from,
     to: range.to,
     wallet: filter.wallet,
+    goals,
+    repayments: fundRepayments,
   });
 
   const fieldClass = 'h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-emerald-500';
@@ -424,6 +429,7 @@ export default function PeriodOverview({
             <StatCard label="Chênh lệch" value={utils.formatVND(period.surplus)} detail={`Tỷ lệ tiết kiệm ${(period.savingsRate * 100).toFixed(1)}%`} toneClass="tone-surplus" />
             <StatCard label="Chi trung bình / tháng" value={utils.formatVND(period.averageMonthlyExpense)} detail={`${utils.formatDisplayDate(period.from)} – ${utils.formatDisplayDate(period.to)} (${period.dayCount} ngày)`} toneClass="tone-average" />
           </div>
+          <SalaryNotes picture={period.picture} />
 
           {afterStats}
 

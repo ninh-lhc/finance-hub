@@ -2,8 +2,8 @@ import {
   expenseByCategory,
   isCountedExpense,
   isCountedIncome,
-  summarizeCounted,
 } from './monthComparison.js';
+import { buildSalaryPicture, isSalaryExpense, repaymentTotal } from './salaryPicture.js';
 
 const TREND_LIMIT = 6;
 const TOP_EXPENSE_LIMIT = 10;
@@ -63,11 +63,21 @@ function totalsBy(transactions, predicate, keyOf) {
   return totals;
 }
 
+function pictureFor(transactions, goals, repayments, from, to) {
+  return buildSalaryPicture({
+    transactions,
+    goals,
+    repaid: repaymentTotal(repayments, { from, to }),
+  });
+}
+
 export function buildPeriodReport({
   transactions = [],
   from,
   to,
   wallet = 'ALL',
+  goals = [],
+  repayments = [],
 } = {}) {
   const range = orderedRange(from, to);
   const period = (transactions || []).filter((transaction) => {
@@ -75,38 +85,41 @@ export function buildPeriodReport({
     if (wallet && wallet !== 'ALL' && transactionWallet(transaction) !== wallet) return false;
     return true;
   });
-  const summary = summarizeCounted(period);
+  const summary = pictureFor(period, goals, repayments, range.from, range.to);
   const months = monthsInRange(range.from, range.to);
   const monthly = months.map((key) => {
-    const monthSummary = summarizeCounted(period.filter((transaction) => String(transaction.date || '').startsWith(key)));
+    const monthTransactions = period.filter((transaction) => String(transaction.date || '').startsWith(key));
+    const monthSummary = pictureFor(monthTransactions, goals, repayments, `${key}-01`, `${key}-31`);
     return {
       key,
       label: `${key.slice(5)}/${key.slice(2, 4)}`,
-      ...monthSummary,
+      income: monthSummary.income,
+      expense: monthSummary.expense,
+      surplus: monthSummary.surplus,
     };
   });
   const monthCount = Math.max(months.length, 1);
   const dayCount = inclusiveDayCount(range.from, range.to);
-  const expenseCategories = shareRows(expenseByCategory(period), summary.expense);
-  const incomeCategories = shareRows(
-    totalsBy(period, isCountedIncome, (transaction) => transaction.category || 'Khác'),
-    summary.income,
-  );
+  const personalExpenses = period.filter((transaction) => isSalaryExpense(transaction, goals));
+  const personalIncome = period.filter((transaction) => isCountedIncome(transaction) && transaction.category !== 'Thu nợ/Hoàn ứng');
+  const expenseCategories = shareRows(expenseByCategory(personalExpenses), summary.expense);
+  const incomeTotals = totalsBy(personalIncome, () => true, (transaction) => transaction.category || 'Khác');
+  if (summary.commission > 0) incomeTotals['Hoa hồng'] = summary.commission;
+  const incomeCategories = shareRows(incomeTotals, summary.income);
   const walletExpenses = shareRows(
-    totalsBy(period, isCountedExpense, transactionWallet),
+    totalsBy(personalExpenses, () => true, transactionWallet),
     summary.expense,
   );
   const trendNames = expenseCategories.slice(0, TREND_LIMIT).map((item) => item.name);
   const trends = trendNames.map((name) => ({
     name,
     points: months.map((key) => period
-      .filter((transaction) => isCountedExpense(transaction)
+      .filter((transaction) => isSalaryExpense(transaction, goals)
         && String(transaction.date || '').startsWith(key)
         && (transaction.category || 'Khác') === name)
       .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)),
   }));
-  const topExpenses = period
-    .filter(isCountedExpense)
+  const topExpenses = personalExpenses
     .slice()
     .sort((left, right) => Number(right.amount || 0) - Number(left.amount || 0)
       || String(right.date || '').localeCompare(String(left.date || '')))
@@ -142,5 +155,6 @@ export function buildPeriodReport({
     trends,
     maxTrend: Math.max(...trends.flatMap((trend) => trend.points), 1),
     topExpenses,
+    picture: summary,
   };
 }
