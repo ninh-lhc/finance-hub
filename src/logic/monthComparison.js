@@ -1,4 +1,4 @@
-import { buildSalaryPicture, repaymentTotal, unpaidFundOffers } from './salaryPicture.js';
+import { buildSalaryPicture, repaymentTotal, unpaidFundOffers, unpaidTransferDebt } from './salaryPicture.js';
 
 const OPENING_BALANCE = 'Số dư đầu kỳ';
 const TRANSFER_IN = 'Chuyển khoản đến';
@@ -94,7 +94,13 @@ export function buildMonthComparison({
     repayments,
     year: previous.year,
     month: previous.month,
-  }).reduce((sum, item) => sum + item.amount, 0);
+  }).reduce((sum, item) => sum + item.amount, 0) + unpaidTransferDebt({
+    pastTransactions: [...(yearTransactions || []), ...(previousTransactions || [])],
+    laterTransactions: currentTransactions,
+    goals,
+    year: selectedYear,
+    month: selectedMonth,
+  });
   const income = currentPicture.income;
   const expense = currentPicture.expense;
   const previousIncome = previousPicture.income;

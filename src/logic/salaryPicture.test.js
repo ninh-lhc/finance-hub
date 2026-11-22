@@ -4,6 +4,7 @@ import {
   isEmergencyGoal,
   salaryPictureLines,
   unpaidFundOffers,
+  unpaidTransferDebt,
 } from './salaryPicture.js';
 
 const tx = (partial) => ({ amount: 0, goalId: '', goalDelta: 0, ...partial });
@@ -86,6 +87,50 @@ describe('buildSalaryPicture', () => {
       ],
     });
     expect(offers).toEqual([{ goalId: 'emergency', amount: 1_500_000 }]);
+  });
+
+  it('owes the full fund transfer and leaves the unspent remainder out of income', () => {
+    const picture = buildSalaryPicture({
+      goals,
+      transactions: [
+        tx({ type: 'EXPENSE', category: 'Chuyển khoản đi', amount: 1_500_000, wallet: 'Viettel Pay', goalId: 'emergency', goalDelta: -1_500_000, date: '2026-11-10', transferId: 'move-1' }),
+        tx({ type: 'INCOME', category: 'Chuyển khoản đến', amount: 1_500_000, wallet: 'Agribank', date: '2026-11-10', transferId: 'move-1' }),
+        tx({ type: 'EXPENSE', category: 'Ăn uống', amount: 100_000, wallet: 'Agribank', date: '2026-11-09' }),
+        tx({ type: 'EXPENSE', category: 'Mua sắm', amount: 1_352_254, wallet: 'Agribank', date: '2026-11-12' }),
+      ],
+    });
+    expect(picture.fundBorrow).toBe(1_500_000);
+    expect(picture.expense).toBe(100_000);
+    expect(picture.commission).toBe(0);
+    expect(picture.income).toBe(0);
+    expect(picture.fundedSpendByCategory).toEqual({ 'Mua sắm': 1_352_254 });
+    expect(picture.fundBorrowByGoal).toEqual({});
+  });
+
+  it('counts a transfer back into the fund as the repayment', () => {
+    const picture = buildSalaryPicture({
+      goals,
+      transactions: [
+        tx({ type: 'INCOME', category: 'Lương', amount: 9_700_000, date: '2026-12-01' }),
+        tx({ type: 'EXPENSE', category: 'Chuyển khoản đi', amount: 1_500_000, wallet: 'Agribank', date: '2026-12-02', transferId: 'back-1' }),
+        tx({ type: 'INCOME', category: 'Chuyển khoản đến', amount: 1_500_000, wallet: 'Viettel Pay', goalId: 'emergency', goalDelta: 1_500_000, date: '2026-12-02', transferId: 'back-1' }),
+      ],
+    });
+    expect(picture.income).toBe(9_700_000);
+    expect(picture.expense).toBe(0);
+    expect(picture.repaid).toBe(1_500_000);
+    expect(picture.surplus).toBe(9_700_000 - 1_500_000);
+  });
+
+  it('clears the carried fund transfer once the money returns', () => {
+    const past = [
+      tx({ id: 'out', type: 'EXPENSE', category: 'Chuyển khoản đi', amount: 1_500_000, wallet: 'Viettel Pay', goalId: 'emergency', goalDelta: -1_500_000, date: '2026-11-10', transferId: 'move-1' }),
+    ];
+    const returned = [
+      tx({ id: 'back', type: 'INCOME', category: 'Chuyển khoản đến', amount: 1_500_000, wallet: 'Viettel Pay', goalId: 'emergency', goalDelta: 1_500_000, date: '2026-12-02', transferId: 'back-1' }),
+    ];
+    expect(unpaidTransferDebt({ pastTransactions: past, laterTransactions: [], goals, year: 2026, month: 11 })).toBe(1_500_000);
+    expect(unpaidTransferDebt({ pastTransactions: past, laterTransactions: returned, goals, year: 2026, month: 11 })).toBe(0);
   });
 
   it('writes the glance lines', () => {

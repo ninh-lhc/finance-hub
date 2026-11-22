@@ -3,7 +3,7 @@ import {
   isCountedExpense,
   isCountedIncome,
 } from './monthComparison.js';
-import { buildSalaryPicture, isSalaryExpense, repaymentTotal } from './salaryPicture.js';
+import { buildSalaryPicture, isSalaryExpense, repaymentTotal, subtractFundedSpend } from './salaryPicture.js';
 
 const TREND_LIMIT = 6;
 const TOP_EXPENSE_LIMIT = 10;
@@ -96,28 +96,36 @@ export function buildPeriodReport({
       income: monthSummary.income,
       expense: monthSummary.expense,
       surplus: monthSummary.surplus,
+      fundedSpendByCategory: monthSummary.fundedSpendByCategory,
     };
   });
   const monthCount = Math.max(months.length, 1);
   const dayCount = inclusiveDayCount(range.from, range.to);
   const personalExpenses = period.filter((transaction) => isSalaryExpense(transaction, goals));
   const personalIncome = period.filter((transaction) => isCountedIncome(transaction) && transaction.category !== 'Thu nợ/Hoàn ứng');
-  const expenseCategories = shareRows(expenseByCategory(personalExpenses), summary.expense);
+  const expenseCategories = shareRows(
+    subtractFundedSpend(expenseByCategory(personalExpenses), summary.fundedSpendByCategory),
+    summary.expense,
+  );
   const incomeTotals = totalsBy(personalIncome, () => true, (transaction) => transaction.category || 'Khác');
   if (summary.commission > 0) incomeTotals['Hoa hồng'] = summary.commission;
   const incomeCategories = shareRows(incomeTotals, summary.income);
   const walletExpenses = shareRows(
-    totalsBy(personalExpenses, () => true, transactionWallet),
+    subtractFundedSpend(totalsBy(personalExpenses, () => true, transactionWallet), summary.fundedSpendByWallet),
     summary.expense,
   );
   const trendNames = expenseCategories.slice(0, TREND_LIMIT).map((item) => item.name);
   const trends = trendNames.map((name) => ({
     name,
-    points: months.map((key) => period
-      .filter((transaction) => isSalaryExpense(transaction, goals)
-        && String(transaction.date || '').startsWith(key)
-        && (transaction.category || 'Khác') === name)
-      .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)),
+    points: months.map((key) => {
+      const funded = monthly.find((item) => item.key === key)?.fundedSpendByCategory?.[name] || 0;
+      const raw = period
+        .filter((transaction) => isSalaryExpense(transaction, goals)
+          && String(transaction.date || '').startsWith(key)
+          && (transaction.category || 'Khác') === name)
+        .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+      return Math.max(0, raw - funded);
+    }),
   }));
   const topExpenses = personalExpenses
     .slice()
