@@ -3,6 +3,7 @@ import {
   buildSalaryPicture,
   isEmergencyGoal,
   salaryPictureLines,
+  listFlowItems,
   unpaidFundOffers,
   unpaidTransferDebt,
 } from './salaryPicture.js';
@@ -131,6 +132,24 @@ describe('buildSalaryPicture', () => {
     ];
     expect(unpaidTransferDebt({ pastTransactions: past, laterTransactions: [], goals, year: 2026, month: 11 })).toBe(1_500_000);
     expect(unpaidTransferDebt({ pastTransactions: past, laterTransactions: returned, goals, year: 2026, month: 11 })).toBe(0);
+  });
+
+  it('lists the chi hộ lines and the fund transfer that paid for later spending', () => {
+    const goals = [{ id: 'emergency', name: 'Quỹ khẩn cấp' }];
+    const shopee = tx({ id: 'shop', type: 'EXPENSE', category: 'Mua sắm', amount: 1_352_254, wallet: 'Agribank', date: '2026-11-12', note: 'Shopee' });
+    const flow = listFlowItems([
+      tx({ id: 'out', type: 'EXPENSE', category: 'Chuyển khoản đi', amount: 1_500_000, wallet: 'Viettel Pay', goalId: 'emergency', goalDelta: -1_500_000, date: '2026-11-10', transferId: 'move-1' }),
+      tx({ id: 'in', type: 'INCOME', category: 'Chuyển khoản đến', amount: 1_500_000, wallet: 'Agribank', date: '2026-11-10', transferId: 'move-1' }),
+      tx({ id: 'help', type: 'EXPENSE', category: 'Chi hộ', amount: 3_342_750, wallet: 'Viettel Pay', date: '2026-11-03' }),
+      tx({ id: 'back', type: 'INCOME', category: 'Thu nợ/Hoàn ứng', amount: 4_300_000, wallet: 'Viettel Pay', date: '2026-11-05' }),
+      shopee,
+    ], goals);
+    expect(flow.helped.map((item) => item.amount)).toEqual([3_342_750]);
+    expect(flow.reimbursements.map((item) => item.amount)).toEqual([4_300_000]);
+    expect(flow.transfers[0].toWallet).toBe('Agribank');
+    expect(flow.spends.map((item) => item.amount)).toEqual([1_352_254]);
+    expect(flow.spent).toBe(1_352_254);
+    expect(flow.remainder).toBe(1_500_000 - 1_352_254);
   });
 
   it('writes the glance lines', () => {

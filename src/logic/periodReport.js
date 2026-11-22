@@ -3,7 +3,7 @@ import {
   isCountedExpense,
   isCountedIncome,
 } from './monthComparison.js';
-import { buildSalaryPicture, isSalaryExpense, repaymentTotal, subtractFundedSpend } from './salaryPicture.js';
+import { buildSalaryPicture, isSalaryExpense, listFlowItems, repaymentTotal, subtractFundedSpend } from './salaryPicture.js';
 
 const TREND_LIMIT = 6;
 const TOP_EXPENSE_LIMIT = 10;
@@ -164,5 +164,6 @@ export function buildPeriodReport({
     maxTrend: Math.max(...trends.flatMap((trend) => trend.points), 1),
     topExpenses,
     picture: summary,
+    flow: listFlowItems(period, goals),
   };
 }

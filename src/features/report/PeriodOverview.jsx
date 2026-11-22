@@ -6,6 +6,7 @@ import {
 import utils from '../../utils/format.js';
 import { CHART_COLORS } from '../../constants/theme.js';
 import SalaryNotes from '../dashboard/SalaryNotes.jsx';
+import FlowDetails from './FlowDetails.jsx';
 import { buildPeriodReport } from '../../logic/periodReport.js';
 
 const INCOME_COLOR = '#16A34A';
@@ -430,6 +431,7 @@ export default function PeriodOverview({
             <StatCard label="Chi trung bình / tháng" value={utils.formatVND(period.averageMonthlyExpense)} detail={`${utils.formatDisplayDate(period.from)} – ${utils.formatDisplayDate(period.to)} (${period.dayCount} ngày)`} toneClass="tone-average" />
           </div>
           <SalaryNotes picture={period.picture} />
+          <FlowDetails picture={period.picture} flow={period.flow} onOpen={handleEditTransaction} />
 
           {afterStats}
 

@@ -48,16 +48,26 @@ function coverFundTransfers(transactions, goals) {
     if (isFundTransferIn(transaction, goals)) transferRepaid += Number(transaction.amount || 0);
   });
 
-  const buckets = outs.map((out) => ({
-    wallet: incomingByTransfer.get(out.transferId)?.wallet || '',
-    date: String(out.date || ''),
-    remaining: Number(out.amount || 0),
-    goalId: out.goalId,
+  const transfers = outs.map((out) => {
+    const incoming = incomingByTransfer.get(out.transferId);
+    return {
+      transaction: out,
+      amount: Number(out.amount || 0),
+      toWallet: incoming?.wallet || '',
+      date: String(out.date || ''),
+    };
+  });
+  const repayments = (transactions || []).filter((transaction) => isFundTransferIn(transaction, goals));
+  const buckets = transfers.map((item) => ({
+    wallet: item.toWallet,
+    date: item.date,
+    remaining: item.amount,
   })).filter((bucket) => bucket.wallet && bucket.remaining > 0)
     .sort((left, right) => left.date.localeCompare(right.date) || left.wallet.localeCompare(right.wallet, 'vi'));
 
   const byCategory = {};
   const byWallet = {};
+  const spends = [];
   let excluded = 0;
   (transactions || [])
     .map((transaction, index) => ({ transaction, index }))
@@ -74,6 +84,7 @@ function coverFundTransfers(transactions, goals) {
         bucket.remaining -= take;
         left -= take;
         excluded += take;
+        spends.push({ transaction, amount: take });
         const category = transaction.category || 'Khác';
         byCategory[category] = (byCategory[category] || 0) + take;
         byWallet[wallet] = (byWallet[wallet] || 0) + take;
@@ -85,7 +96,7 @@ function coverFundTransfers(transactions, goals) {
     borrowedByGoal[out.goalId] = (borrowedByGoal[out.goalId] || 0) + Number(out.amount || 0);
   });
   const borrowed = Object.values(borrowedByGoal).reduce((sum, amount) => sum + amount, 0);
-  return { excluded, byCategory, byWallet, borrowedByGoal, borrowed, transferRepaid };
+  return { excluded, byCategory, byWallet, borrowedByGoal, borrowed, transferRepaid, transfers, spends, repayments };
 }
 
 export function subtractFundedSpend(totals, funded) {
@@ -232,6 +243,53 @@ export function unpaidHelpedLocks({ transactions, goals, repayments }) {
     ), 0);
     return { goalId, amount: Math.max(0, helped - covered) };
   }).filter((item) => item.amount > 0);
+}
+
+function flowEntry(transaction, amount, extra = {}) {
+  return {
+    id: transaction?.id,
+    date: transaction?.date || '',
+    note: transaction?.note || '',
+    category: transaction?.category || '',
+    wallet: transaction?.linkedWallet || transaction?.wallet || '',
+    amount: Number(amount || 0),
+    transaction,
+    ...extra,
+  };
+}
+
+function byRecent(left, right) {
+  return String(right.date || '').localeCompare(String(left.date || ''))
+    || right.amount - left.amount;
+}
+
+export function listFlowItems(transactions = [], goals = []) {
+  const helped = [];
+  const reimbursements = [];
+  const directSpends = [];
+  const funds = emergencyIds(goals);
+  (transactions || []).forEach((transaction) => {
+    const amount = Number(transaction?.amount || 0);
+    if (!amount) return;
+    if (isCountedIncome(transaction) && transaction.category === PASS_THROUGH_INCOME) {
+      reimbursements.push(flowEntry(transaction, amount));
+    }
+    if (isCountedExpense(transaction) && transaction.category === PASS_THROUGH_EXPENSE) {
+      helped.push(flowEntry(transaction, amount, { fromFund: funds.has(transaction.goalId) && Number(transaction.goalDelta || 0) < 0 }));
+    }
+    if (isFundBorrow(transaction, goals)) directSpends.push(flowEntry(transaction, amount));
+  });
+  const coverage = coverFundTransfers(transactions, goals);
+  const directTotal = directSpends.reduce((sum, item) => sum + item.amount, 0);
+  return {
+    helped: helped.sort(byRecent),
+    reimbursements: reimbursements.sort(byRecent),
+    transfers: coverage.transfers.map((item) => flowEntry(item.transaction, item.amount, { toWallet: item.toWallet })).sort(byRecent),
+    spends: [...directSpends, ...coverage.spends.map((item) => flowEntry(item.transaction, item.amount))].sort(byRecent),
+    repayments: coverage.repayments.map((transaction) => flowEntry(transaction, transaction.amount)).sort(byRecent),
+    spent: directTotal + coverage.excluded,
+    remainder: Math.max(0, coverage.borrowed - coverage.excluded),
+  };
 }
 
 export function salaryPictureLines(picture) {
