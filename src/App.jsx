@@ -12,6 +12,7 @@ import AppHeader from './components/layout/AppHeader.jsx';
 import MainNav from './components/layout/MainNav.jsx';
 import Toast from './components/common/Toast.jsx';
 import DashboardView from './features/dashboard/DashboardView.jsx';
+import SixJarsPanel from './features/dashboard/SixJarsPanel.jsx';
 import TransactionsView from './features/transactions/TransactionsView.jsx';
 import AnnualView from './features/annual/AnnualView.jsx';
 import ReportView from './features/report/ReportView.jsx';
@@ -22,6 +23,7 @@ import utils from './utils/format.js';
 import { deriveFinanceLogic, deriveTransactionView } from './logic/deriveFinance.js';
 import { buildDataSourceDiagnostics } from './logic/dataSourceDiagnostics.js';
 import { calculateWalletBalances } from './logic/balanceMaintenance.js';
+import { buildSixJarPlan } from './logic/sixJars.js';
 import { buildMonthComparison, filterByYearMonth, previousPeriod } from './logic/monthComparison.js';
 import { buildMonthReport } from './logic/monthReport.js';
 import { deleteConfirmMessage } from './logic/deleteConfirm.js';
@@ -219,7 +221,7 @@ export default function App() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [annualRefreshTick, setAnnualRefreshTick] = useState(0);
 
-  const { categories, wallets, walletBalances } = useFinanceSettings({ user, getDocRef, syncCode });
+  const { categories, wallets, walletBalances, sixJars } = useFinanceSettings({ user, getDocRef, syncCode });
   const { transactions, transactionsReady, goals, budgets, fundRepayments, reimbursementLinks } = useMonthlyFinanceData({
     user,
     syncCode,
@@ -381,6 +383,21 @@ export default function App() {
   const financeContext = useMemo(() => history
     ? buildFinanceContext(history.flatMap((entry) => entry.transactions), goals, reimbursementLinks)
     : undefined, [history, goals, reimbursementLinks]);
+  const sixJarPlan = useMemo(() => {
+    if (!sixJars || !history || !transactionsReady) return null;
+    const previous = previousPeriod(selectedYear, selectedMonth);
+    const previousKey = `${previous.year}-${String(previous.month + 1).padStart(2, '0')}`;
+    return buildSixJarPlan({
+      settings: sixJars,
+      transactions,
+      previousTransactions: history.find(({ period }) => period === previousKey)?.transactions || [],
+      goals,
+      context: financeContext,
+      repayments: fundRepayments,
+      year: selectedYear,
+      month: selectedMonth,
+    });
+  }, [sixJars, history, transactionsReady, transactions, goals, financeContext, fundRepayments, selectedYear, selectedMonth]);
   const outstandingBorrow = useMemo(() => {
     if (!history) return undefined;
     const period = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
@@ -790,7 +807,7 @@ export default function App() {
         const copies = snapshots.flatMap(({ name, snapshot }) => snapshot.docs.map((item) => ({
           name, id: item.id, data: item.data(),
         })));
-        copies.push({ name: 'settings', id: 'general', data: { categories, wallets, walletBalances } });
+        copies.push({ name: 'settings', id: 'general', data: { categories, wallets, walletBalances, ...(sixJars ? { sixJars } : {}) } });
 
         const chunkSize = 400;
         for (let i = 0; i < copies.length; i += chunkSize) {
@@ -1041,7 +1058,9 @@ export default function App() {
        categories,
        form: settingsForm,
        editingId,
+       sixJars,
      });
+     if (result.outcome === 'renamed') setAnnualRefreshTick((value) => value + 1);
      cancelEdit();
      showToast(
        result.outcome === 'renamed' ? 'Cập nhật danh mục thành công!' : 'Đã lưu danh mục mới!',
@@ -1160,6 +1179,34 @@ export default function App() {
               generateDashboardAdvice={generateDashboardAdvice}
               monthComparison={monthComparison}
               comparisonReady={comparisonReady}
+              sixJarsPanel={user ? (
+                <SixJarsPanel
+                  key={syncCode || user.uid}
+                  settings={sixJars}
+                  categories={categories.EXPENSE}
+                  plan={sixJarPlan}
+                  onSave={async (settings) => {
+                    try {
+                      const settingsRef = getDocRef('settings', 'general');
+                      await runTransaction(db, async (transaction) => {
+                        const stored = (await transaction.get(settingsRef)).data()?.categories || categories;
+                        const expenseCategories = stored.EXPENSE || [];
+                        transaction.set(settingsRef, {
+                          sixJars: settings,
+                          categories: {
+                            ...stored,
+                            EXPENSE: [...new Set([...expenseCategories, settings.childCategory])],
+                          },
+                        }, { merge: true });
+                      });
+                    } catch (error) {
+                      showToast('Chưa lưu được thiết lập 6 hũ.', 'error');
+                      throw error;
+                    }
+                    showToast('Đã lưu thiết lập 6 hũ.', 'success');
+                  }}
+                />
+              ) : null}
               setFilterType={setFilterType}
               setFilterCategory={setFilterCategory}
               setFilterWallet={setFilterWallet}

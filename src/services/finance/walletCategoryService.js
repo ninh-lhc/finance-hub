@@ -112,6 +112,7 @@ export async function saveCategoryToFirestore({
   categories,
   form,
   editingId,
+  sixJars,
   currentYear = new Date().getFullYear(),
 }) {
   const cleanName = normalizeCategoryName(form.categoryName);
@@ -153,9 +154,15 @@ export async function saveCategoryToFirestore({
         categoryType,
         newCatsList,
       });
+      const renamedJars = categoryType === 'EXPENSE' && sixJars && (
+        sixJars.childCategory === oldName || sixJars.categoryJars.some(([category]) => category === oldName)
+      ) ? {
+        childCategory: sixJars.childCategory === oldName ? cleanName : sixJars.childCategory,
+        categoryJars: sixJars.categoryJars.map(([category, jar]) => [category === oldName ? cleanName : category, jar]),
+      } : null;
       batch.set(
         getDocRef('settings', 'general'),
-        { categories: newCategories },
+        { categories: newCategories, ...(renamedJars ? { sixJars: renamedJars } : {}) },
         { merge: true },
       );
       await batch.commit();

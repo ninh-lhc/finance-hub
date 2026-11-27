@@ -375,6 +375,7 @@ export default function DashboardView(props) {
     monthComparison,
     handleEditTransaction,
     comparisonReady,
+    sixJarsPanel,
   } = props;
 
   const [activeDay, setActiveDay] = useState(null);
@@ -492,6 +493,8 @@ export default function DashboardView(props) {
         />
       </div>
       <SalaryNotes picture={logic.salaryPicture} />
+
+      {sixJarsPanel}
 
       <div className={goalDone ? 'space-y-4' : 'grid grid-cols-1 lg:grid-cols-2 gap-6'}>
         <div className={goalDone ? 'min-w-0' : 'min-w-0 h-full'}>

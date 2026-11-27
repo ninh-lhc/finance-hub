@@ -8,12 +8,14 @@ export default function useFinanceSettings({ user, getDocRef, syncCode }) {
   });
   const [wallets, setWallets] = useState(['Tiền mặt', 'Ví ngân hàng', 'Thẻ tín dụng']);
   const [walletBalances, setWalletBalances] = useState({});
+  const [jarConfig, setJarConfig] = useState(null);
 
   useEffect(() => {
     if (!user) return;
     const unsubSettings = onSnapshot(
       getDocRef('settings', 'general'),
       (docSnap) => {
+        setJarConfig({ source: getDocRef, settings: docSnap.data()?.sixJars || null });
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (data.categories) setCategories(data.categories);
@@ -26,5 +28,6 @@ export default function useFinanceSettings({ user, getDocRef, syncCode }) {
     return () => unsubSettings();
   }, [user, syncCode, getDocRef]);
 
-  return { categories, wallets, walletBalances };
+  const sixJars = jarConfig?.source === getDocRef ? jarConfig.settings : null;
+  return { categories, wallets, walletBalances, sixJars };
 }
