@@ -5,6 +5,7 @@ import {
   salaryPictureLines,
   listFlowItems,
   unpaidFundOffers,
+  monthlyFundRepaymentOffers,
   unpaidTransferDebt,
 } from './salaryPicture.js';
 
@@ -88,6 +89,29 @@ describe('buildSalaryPicture', () => {
       ],
     });
     expect(offers).toEqual([{ goalId: 'emergency', amount: 1_500_000 }]);
+  });
+
+  it('carries installments across months and years until the balance is paid', () => {
+    const history = [{
+      period: '2026-11',
+      transactions: [tx({
+        type: 'EXPENSE', amount: 2_000_000, goalId: 'emergency', goalDelta: -2_000_000,
+      })],
+    }];
+    const december = {
+      goalId: 'emergency', kind: 'borrow', debtYear: 2026, debtMonth: 10,
+      amount: 500_000, payDate: '2026-12-01',
+    };
+    const repayment = { history, goals, repayments: [december] };
+    expect(monthlyFundRepaymentOffers({ ...repayment, payDate: '2026-12-15' })).toEqual([]);
+    expect(monthlyFundRepaymentOffers({ ...repayment, payDate: '2027-01-01' })).toEqual([
+      { goalId: 'emergency', amount: 1_500_000, debtYear: 2026, debtMonth: 10 },
+    ]);
+    expect(monthlyFundRepaymentOffers({
+      ...repayment,
+      repayments: [december, { ...december, amount: 1_500_000, payDate: '2027-01-01' }],
+      payDate: '2027-02-01',
+    })).toEqual([]);
   });
 
   it('owes the full fund transfer and leaves the unspent remainder out of income', () => {

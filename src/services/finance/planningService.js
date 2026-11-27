@@ -1,4 +1,4 @@
-import { addDoc, updateDoc, deleteDoc, getDocs, writeBatch, doc, increment } from 'firebase/firestore';
+import { addDoc, updateDoc, deleteDoc, getDocs, writeBatch, doc, increment, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase/config.js';
 import { getTransactionMonthCollectionNames } from '../../logic/walletCategoryEntities.js';
 import { goalLinkDetachPatch } from '../../logic/goalMovement.js';
@@ -88,4 +88,28 @@ export async function lockFundRepayment({
     createdAt: new Date().toISOString(),
   });
   await batch.commit();
+}
+
+export async function lockMonthlyFundRepayment({ getCollectionRef, getDocRef, plan, payDate, repaymentVersion }) {
+  const monthlyRef = getDocRef('fundRepayments', `borrow_${payDate.slice(0, 7)}`);
+  const stateRef = getDocRef('fundRepayments', 'borrow_state');
+  const createdAt = new Date().toISOString();
+  return runTransaction(db, async (transaction) => {
+    if ((await transaction.get(monthlyRef)).exists()) return;
+    const state = await transaction.get(stateRef);
+    if (state.data()?.latestPayment !== repaymentVersion) {
+      throw new Error('Fund repayments changed while confirming this payment');
+    }
+
+    plan.forEach((item, index) => {
+      transaction.update(getDocRef('goals', item.goalId), { amount: increment(item.amount) });
+      transaction.set(index === 0 ? monthlyRef : doc(getCollectionRef('fundRepayments')), {
+        ...item,
+        payDate,
+        kind: 'borrow',
+        createdAt,
+      });
+    });
+    transaction.set(stateRef, { latestPayment: monthlyRef.id });
+  });
 }

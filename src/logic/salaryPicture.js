@@ -235,6 +235,22 @@ export function unpaidFundOffers({ transactions, goals, repayments, year, month 
   }).filter((item) => item.amount > 0);
 }
 
+export function monthlyFundRepaymentOffers({ history, goals, repayments, payDate }) {
+  const payMonth = payDate.slice(0, 7);
+  if (repayments.some((item) => item.kind === 'borrow' && item.payDate?.slice(0, 7) === payMonth)) {
+    return [];
+  }
+
+  return [...history]
+    .filter(({ period }) => period < payMonth)
+    .sort((left, right) => left.period.localeCompare(right.period))
+    .flatMap(({ period, transactions }) => {
+      const [year, month] = period.split('-').map(Number);
+      return unpaidFundOffers({ transactions, goals, repayments, year, month: month - 1 })
+        .map((offer) => ({ ...offer, debtYear: year, debtMonth: month - 1 }));
+    });
+}
+
 export function unpaidHelpedLocks({ transactions, goals, repayments }) {
   const picture = buildSalaryPicture({ transactions, goals });
   return Object.entries(picture.helpedFromFundByGoal).map(([goalId, helped]) => {

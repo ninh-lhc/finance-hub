@@ -54,9 +54,10 @@ import {
   deleteBudgetFromFirestore,
   deleteGoalFromFirestore,
   lockFundRepayment,
+  lockMonthlyFundRepayment,
 } from './services/finance/planningService.js';
-import { unpaidFundOffers, unpaidHelpedLocks } from './logic/salaryPicture.js';
-import { isCategoryFormReady, hasCategoryNameConflict, hasWalletNameConflict, normalizeCategoryName, normalizeWalletName, canDeleteCategory, canDeleteWallet, canRenameOpeningBalanceCategory } from './logic/walletCategoryEntities.js';
+import { monthlyFundRepaymentOffers, unpaidHelpedLocks } from './logic/salaryPicture.js';
+import { getTransactionMonthCollectionNames, isCategoryFormReady, hasCategoryNameConflict, hasWalletNameConflict, normalizeCategoryName, normalizeWalletName, canDeleteCategory, canDeleteWallet, canRenameOpeningBalanceCategory } from './logic/walletCategoryEntities.js';
 import {
   saveWalletToFirestore,
   saveCategoryToFirestore,
@@ -95,10 +96,12 @@ function goalSaveError(result) {
 // ==========================================
 // MAIN APP COMPONENT
 // ==========================================
-function repaymentPlan(offers, cap) {
+function repaymentPlan(offers, cap, prioritizeLargest = true) {
   let remaining = Number(cap || 0);
-  return [...offers]
-    .sort((left, right) => right.amount - left.amount)
+  const orderedOffers = prioritizeLargest
+    ? [...offers].sort((left, right) => right.amount - left.amount)
+    : offers;
+  return orderedOffers
     .map((offer) => {
       const amount = Math.min(offer.amount, remaining);
       remaining -= amount;
@@ -114,33 +117,38 @@ async function offerFundAdjustment({ payload, goals, fundRepayments, getCollecti
   if (!year || month < 0) return;
 
   if (payload.category === 'Lương') {
-    const previous = previousPeriod(year, month);
-    const snap = await getDocs(getCollectionRef(`transactions_${previous.year}_${String(previous.month + 1).padStart(2, '0')}`));
-    const previousTransactions = snap.docs.map((item) => ({ id: item.id, ...item.data() }));
-    const plan = repaymentPlan(unpaidFundOffers({
-      transactions: previousTransactions,
-      goals,
-      repayments: fundRepayments,
-      year: previous.year,
-      month: previous.month,
-    }), payload.amount);
-    const amount = plan.reduce((sum, item) => sum + item.amount, 0);
-    if (amount <= 0) return;
-    const accepted = window.confirm(`Tháng trước mượn quỹ khẩn cấp ${utils.formatVND(amount)}. Trả từ khoản lương này?`);
-    if (!accepted) return;
-    for (const item of plan) {
-      await lockFundRepayment({
-        getCollectionRef,
-        getDocRef,
-        goalId: item.goalId,
-        amount: item.amount,
-        debtYear: previous.year,
-        debtMonth: previous.month,
-        payDate: date,
-        kind: 'borrow',
-      });
+    const repaymentSnapshot = await getDocs(getCollectionRef('fundRepayments'));
+    const repayments = repaymentSnapshot.docs.map((item) => item.data());
+    const payMonth = date.slice(0, 7);
+    if (repayments.some((item) => item.kind === 'borrow' && item.payDate?.slice(0, 7) === payMonth)) return;
+    const repaymentVersion = repaymentSnapshot.docs.find((item) => item.id === 'borrow_state')?.data().latestPayment;
+    const history = await Promise.all(getTransactionMonthCollectionNames(new Date().getFullYear())
+      .map((name) => ({ name, period: name.slice('transactions_'.length).replace('_', '-') }))
+      .filter(({ period }) => period < payMonth)
+      .map(async ({ name, period }) => {
+        const snap = await getDocs(getCollectionRef(name));
+        return { period, transactions: snap.docs.map((item) => ({ id: item.id, ...item.data() })) };
+      }));
+    const offers = monthlyFundRepaymentOffers({ history, goals, repayments, payDate: date });
+    const outstanding = offers.reduce((sum, item) => sum + item.amount, 0);
+    const maximum = Math.floor(Math.min(outstanding, Number(payload.amount)));
+    if (maximum < 1) return;
+
+    const suggested = Math.min(maximum, Math.max(1, Math.floor(Number(payload.amount) * 0.1)));
+    let message = `Còn nợ quỹ khẩn cấp ${utils.formatVND(outstanding)}. Nhập số tiền muốn hoàn tháng này (tối đa ${utils.formatVND(maximum)}, chỉ nhập chữ số).`;
+    for (;;) {
+      const input = window.prompt(message, String(suggested))?.trim();
+      if (!input) return;
+      const amount = Number(input);
+      if (/^\d+$/.test(input) && Number.isSafeInteger(amount) && amount >= 1 && amount <= maximum) {
+        await lockMonthlyFundRepayment({
+          getCollectionRef, getDocRef, repaymentVersion,
+          plan: repaymentPlan(offers, amount, false), payDate: date,
+        });
+        return;
+      }
+      message = `Số tiền hoàn quỹ phải từ 1 đến ${utils.formatVND(maximum)} và chỉ gồm chữ số.`;
     }
-    return;
   }
 
   if (payload.category !== 'Thu nợ/Hoàn ứng') return;
