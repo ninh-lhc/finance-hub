@@ -12,7 +12,7 @@ function fold(value) {
 }
 
 export function isEmergencyGoal(goal) {
-  return fold(goal?.name).includes('khan cap');
+  return goal?.isEmergencyFund === true || fold(goal?.name).includes('khan cap');
 }
 
 function emergencyIds(goals) {
@@ -61,6 +61,8 @@ function coverFundTransfers(transactions, goals) {
   const buckets = transfers.map((item) => ({
     wallet: item.toWallet,
     date: item.date,
+    createdAt: item.transaction.createdAt,
+    goalId: item.transaction.goalId,
     remaining: item.amount,
   })).filter((bucket) => bucket.wallet && bucket.remaining > 0)
     .sort((left, right) => left.date.localeCompare(right.date) || left.wallet.localeCompare(right.wallet, 'vi'));
@@ -70,19 +72,31 @@ function coverFundTransfers(transactions, goals) {
   const spends = [];
   let excluded = 0;
   (transactions || [])
-    .map((transaction, index) => ({ transaction, index }))
-    .filter(({ transaction }) => isSalaryExpense(transaction, goals))
-    .sort((left, right) => String(left.transaction.date || '').localeCompare(String(right.transaction.date || '')) || left.index - right.index)
-    .forEach(({ transaction }) => {
+    .flatMap((transaction) => {
+      const incoming = transaction.category === 'Chuyển khoản đi' && transaction.transferId
+        ? incomingByTransfer.get(transaction.transferId)
+        : null;
+      const returnGoal = isFundTransferIn(incoming, goals) ? incoming.goalId : '';
+      return returnGoal || isSalaryExpense(transaction, goals) ? [{ transaction, returnGoal }] : [];
+    })
+    .sort((left, right) => String(left.transaction.date || '').localeCompare(String(right.transaction.date || ''))
+      || (left.transaction.createdAt || (left.returnGoal ? '' : '~'))
+        .localeCompare(right.transaction.createdAt || (right.returnGoal ? '' : '~'))
+      || Number(Boolean(right.returnGoal)) - Number(Boolean(left.returnGoal)))
+    .forEach(({ transaction, returnGoal }) => {
       let left = Number(transaction.amount || 0);
       const wallet = transaction.linkedWallet || transaction.wallet;
       buckets.forEach((bucket) => {
         if (left <= 0 || bucket.remaining <= 0) return;
         if (bucket.wallet !== wallet) return;
         if (String(transaction.date || '') < bucket.date) return;
+        if (transaction.date === bucket.date && transaction.createdAt && bucket.createdAt
+          && transaction.createdAt < bucket.createdAt) return;
+        if (returnGoal && returnGoal !== bucket.goalId) return;
         const take = Math.min(left, bucket.remaining);
         bucket.remaining -= take;
         left -= take;
+        if (returnGoal) return;
         excluded += take;
         spends.push({ transaction, amount: take });
         const category = transaction.category || 'Khác';
@@ -96,7 +110,8 @@ function coverFundTransfers(transactions, goals) {
     borrowedByGoal[out.goalId] = (borrowedByGoal[out.goalId] || 0) + Number(out.amount || 0);
   });
   const borrowed = Object.values(borrowedByGoal).reduce((sum, amount) => sum + amount, 0);
-  return { excluded, byCategory, byWallet, borrowedByGoal, borrowed, transferRepaid, transfers, spends, repayments };
+  const remaining = buckets.reduce((sum, bucket) => sum + bucket.remaining, 0);
+  return { excluded, byCategory, byWallet, borrowedByGoal, borrowed, transferRepaid, transfers, spends, repayments, remaining };
 }
 
 export function subtractFundedSpend(totals, funded) {
@@ -154,7 +169,7 @@ export function repaymentTotal(repayments, { year, month, from, to } = {}) {
   }, 0);
 }
 
-export function buildSalaryPicture({ transactions = [], goals = [], repaid = 0, context } = {}) {
+export function buildSalaryPicture({ transactions = [], goals = [], repaid = 0, context, through } = {}) {
   const funds = emergencyIds(goals);
   let otherIncome = 0;
   let reimbursement = 0;
@@ -214,7 +229,7 @@ export function buildSalaryPicture({ transactions = [], goals = [], repaid = 0, 
   let unreimbursed = Math.max(0, helped - reimbursement);
   let unmatchedReimbursement = 0;
   if (context) {
-    ({ matched, commission, unreimbursed, unmatchedReimbursement } = context.reconcile(transactions));
+    ({ matched, commission, unreimbursed, unmatchedReimbursement } = context.reconcile(transactions, through));
   }
   const income = otherIncome + commission;
   const expense = personalExpense;
@@ -248,7 +263,6 @@ export function buildFinanceContext(transactions, goals, reimbursementLinks = []
   const open = [];
   const receipts = new Map();
   const links = new Map(reimbursementLinks.map(({ receiptKey, expenseKey }) => [receiptKey, expenseKey]));
-  const reserved = new Set(links.values());
   const ordered = [...transactions].sort((left, right) => String(left.date).localeCompare(String(right.date))
     || Number(left.type === 'INCOME') - Number(right.type === 'INCOME'));
   for (const transaction of ordered) {
@@ -261,7 +275,7 @@ export function buildFinanceContext(transactions, goals, reimbursementLinks = []
     const note = fold(transaction.note).trim();
     const receiptKey = transactionKey(transaction);
     const linkedExpense = links.get(receiptKey);
-    const candidates = open.filter((item) => item.remaining > 0 && !reserved.has(transactionKey(item.transaction)));
+    const candidates = open.filter((item) => item.remaining > 0);
     const byNote = note ? candidates.filter((item) => fold(item.transaction.note).trim() === note) : [];
     const matches = linkedExpense
       ? open.filter((item) => item.remaining > 0 && transactionKey(item.transaction) === linkedExpense)
@@ -282,12 +296,11 @@ export function buildFinanceContext(transactions, goals, reimbursementLinks = []
       && Number(transaction.amount) > payments.filter((payment) => payment.date <= receipt.date)
         .reduce((sum, payment) => sum + payment.amount, 0))
       .map(({ transaction }) => transaction),
-    reconcile(scope) {
+    reconcile(scope, through = scope.reduce((latest, transaction) => transaction.date > latest ? transaction.date : latest, '')) {
       let matched = 0;
       let commission = 0;
       let unreimbursed = 0;
       let unmatchedReimbursement = 0;
-      const through = scope.reduce((latest, transaction) => transaction.date > latest ? transaction.date : latest, '');
       for (const transaction of scope) {
         const key = transactionKey(transaction);
         const expense = expenses.get(key);
@@ -450,7 +463,7 @@ export function listFlowItems(transactions = [], goals = [], context) {
     spends: [...directSpends, ...fundedSpends.map((item) => flowEntry(item.transaction, item.amount))].sort(byRecent),
     repayments: coverage.repayments.map((transaction) => flowEntry(transaction, transaction.amount)).sort(byRecent),
     spent: directTotal + fundedTotal,
-    remainder: Math.max(0, coverage.borrowed - fundedTotal),
+    remainder: coverage.remaining,
   };
 }
 

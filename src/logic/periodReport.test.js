@@ -98,4 +98,28 @@ describe('buildPeriodReport', () => {
     expect(report.monthly[0]).toMatchObject({ expense: 50, surplus: -50 });
     expect(report.drilldown.wallet.B[0].amount).toBe(50);
   });
+
+  it('does not fund personal spending with money already returned to the emergency fund', () => {
+    const goal = { id: 'e', name: 'Quỹ khẩn cấp', wallet: 'A' };
+    const rows = [
+      { type: 'EXPENSE', category: 'Chuyển khoản đi', date: '2026-10-01', amount: 100, wallet: 'A', transferId: 't', goalId: 'e', goalDelta: -100 },
+      { type: 'INCOME', category: 'Chuyển khoản đến', date: '2026-10-01', amount: 100, wallet: 'B', transferId: 't' },
+      { type: 'EXPENSE', category: 'Chuyển khoản đi', date: '2026-10-02', amount: 100, wallet: 'B', transferId: 'r' },
+      { type: 'INCOME', category: 'Chuyển khoản đến', date: '2026-10-02', amount: 100, wallet: 'A', transferId: 'r', goalId: 'e', goalDelta: 100 },
+      { type: 'EXPENSE', category: 'Mua sắm', date: '2026-10-03', amount: 100, wallet: 'B' },
+    ];
+    const report = buildPeriodReport({ transactions: rows, goals: [goal], from: '2026-10-01', to: '2026-10-31' });
+    expect(report.expense).toBe(100);
+    expect(report.flow.remainder).toBe(0);
+  });
+
+  it('uses the end of the report period to account for a receipt in another wallet', () => {
+    const transactions = [
+      { id: 'out', type: 'EXPENSE', category: 'Chi hộ', date: '2026-10-01', amount: 100, wallet: 'A' },
+      { id: 'in', type: 'INCOME', category: 'Thu nợ/Hoàn ứng', date: '2026-10-03', amount: 100, wallet: 'B' },
+    ];
+    const options = { transactions, wallet: 'A', from: '2026-10-01' };
+    expect(buildPeriodReport({ ...options, to: '2026-10-02' }).picture.unreimbursed).toBe(100);
+    expect(buildPeriodReport({ ...options, to: '2026-10-03' }).picture.unreimbursed).toBe(0);
+  });
 });

@@ -780,30 +780,25 @@ export default function App() {
       const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
       
       try {
-        const currentYearObj = new Date().getFullYear();
-        const payloads = [];
-        
-        for(let y = currentYearObj - 5; y <= currentYearObj + 1; y++) {
-            for(let m = 1; m <= 12; m++) {
-                const mStr = String(m).padStart(2,'0');
-                const snap = await getDocs(collection(db, 'artifacts', baseAppId, 'users', user.uid, `transactions_${y}_${mStr}`));
-                snap.docs.forEach(doc => {
-                    payloads.push(setDoc(doc(db, 'artifacts', baseAppId, 'public', 'data', `sync_${newCode}_transactions_${y}_${mStr}`, doc.id), doc.data()));
-                });
-            }
-        }
-        
-        const gSnap = await getDocs(collection(db, 'artifacts', baseAppId, 'users', user.uid, 'goals'));
-        gSnap.docs.forEach(d => payloads.push(setDoc(doc(db, 'artifacts', baseAppId, 'public', 'data', `sync_${newCode}_goals`, d.id), d.data())));
-        
-        const bSnap = await getDocs(collection(db, 'artifacts', baseAppId, 'users', user.uid, 'budgets'));
-        bSnap.docs.forEach(d => payloads.push(setDoc(doc(db, 'artifacts', baseAppId, 'public', 'data', `sync_${newCode}_budgets`, d.id), d.data())));
+        const collectionNames = [
+          ...getTransactionMonthCollectionNames(new Date().getFullYear()),
+          'goals', 'budgets', 'fundRepayments', 'reimbursementLinks',
+        ];
+        const snapshots = await Promise.all(collectionNames.map(async (name) => ({
+          name, snapshot: await getDocs(collection(db, 'artifacts', baseAppId, 'users', user.uid, name)),
+        })));
+        const copies = snapshots.flatMap(({ name, snapshot }) => snapshot.docs.map((item) => ({
+          name, id: item.id, data: item.data(),
+        })));
+        copies.push({ name: 'settings', id: 'general', data: { categories, wallets, walletBalances } });
 
-        payloads.push(setDoc(doc(db, 'artifacts', baseAppId, 'public', 'data', `sync_${newCode}_settings`, 'general'), { categories, wallets, walletBalances }));
-
-        const chunkSize = 50;
-        for (let i = 0; i < payloads.length; i += chunkSize) {
-            await Promise.all(payloads.slice(i, i + chunkSize));
+        const chunkSize = 400;
+        for (let i = 0; i < copies.length; i += chunkSize) {
+          const batch = writeBatch(db);
+          for (const { name, id, data } of copies.slice(i, i + chunkSize)) {
+            batch.set(doc(db, 'artifacts', baseAppId, 'public', 'data', `sync_${newCode}_${name}`, id), data);
+          }
+          await batch.commit();
         }
 
         localStorage.setItem('finance_hub_sync_code', newCode);
@@ -1061,6 +1056,7 @@ export default function App() {
        getDocRef,
        payload,
        editingId,
+       previousGoal,
        detachLinks: amountEdited,
      });
      cancelEdit();

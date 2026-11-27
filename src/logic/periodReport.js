@@ -94,6 +94,7 @@ function pictureFor(transactions, goals, repayments, from, to, context) {
     goals,
     repaid: repaymentTotal(repayments, { from, to }),
     context,
+    through: to,
   });
 }
 

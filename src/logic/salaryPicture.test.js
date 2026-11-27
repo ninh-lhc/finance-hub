@@ -206,6 +206,15 @@ describe('buildSalaryPicture', () => {
     expect(buildSalaryPicture({ transactions: [second], context: linked }).unreimbursed).toBe(100);
   });
 
+  it('keeps an earlier automatic partial match when a later receipt is explicitly linked', () => {
+    const spent = tx({ id: 'help', type: 'EXPENSE', category: 'Chi hộ', date: '2026-10-01', amount: 100, note: 'Order 1' });
+    const first = tx({ id: 'first', type: 'INCOME', category: 'Thu nợ/Hoàn ứng', date: '2026-10-02', amount: 40, note: 'Order 1' });
+    const second = tx({ id: 'second', type: 'INCOME', category: 'Thu nợ/Hoàn ứng', date: '2026-10-03', amount: 60 });
+    const transactions = [spent, first, second];
+    const context = buildFinanceContext(transactions, goals, [{ receiptKey: 'second', expenseKey: 'help' }]);
+    expect(context.reconcile(transactions)).toMatchObject({ matched: 100, unreimbursed: 0, unmatchedReimbursement: 0 });
+  });
+
   it('counts a transfer back into the fund as the repayment', () => {
     const picture = buildSalaryPicture({
       goals,

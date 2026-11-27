@@ -235,6 +235,7 @@ export function buildMonthReport({
     goals,
     repaid: repaymentTotal(repayments, { year, month }),
     context,
+    through: `${year}-${String(month + 1).padStart(2, '0')}-31`,
   });
   const current = asPicture(currentTransactions, selectedYear, selectedMonth);
   const previousSummary = asPicture(previousTransactions, previous.year, previous.month);

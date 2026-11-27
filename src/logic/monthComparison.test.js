@@ -14,6 +14,18 @@ const tx = (partial) => ({
   date: partial.date,
 });
 
+it('uses personal spending for the total, monthly chart, and category rows', () => {
+  const goals = [{ id: 'emergency', name: 'Quỹ khẩn cấp' }];
+  const currentTransactions = [
+    { type: 'EXPENSE', amount: 100, date: '2026-11-10', category: 'Mua sắm', goalId: 'emergency', goalDelta: -100 },
+    { type: 'EXPENSE', amount: 30, date: '2026-11-11', category: 'Mua sắm' },
+  ];
+  const report = buildMonthComparison({ goals, currentTransactions, selectedYear: 2026, selectedMonth: 10 });
+  expect(report.expense).toBe(30);
+  expect(report.monthlyExpenses[10]).toBe(30);
+  expect(report.categories[0]).toMatchObject({ name: 'Mua sắm', current: 30, yearAverage: 30 });
+});
+
 describe('previousPeriod', () => {
   it('steps back one month inside the same year', () => {
     expect(previousPeriod(2025, 3)).toEqual({ year: 2025, month: 2 });

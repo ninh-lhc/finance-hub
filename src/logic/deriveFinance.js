@@ -106,6 +106,7 @@ export const deriveFinanceLogic = ({
     goals,
     repaid: repaymentTotal(fundRepayments, { year: selectedYear, month: selectedMonth }),
     context,
+    through: `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-31`,
   });
   const previous = previousPeriod(selectedYear, selectedMonth);
   const previousTransactions = selectedMonth === 0

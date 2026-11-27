@@ -1,21 +1,36 @@
 import { describe, expect, it, vi } from 'vitest';
-import { lockMonthlyFundRepayment } from './planningService.js';
+import { lockMonthlyFundRepayment, saveGoalToFirestore } from './planningService.js';
 
-const { transaction, runTransaction } = vi.hoisted(() => {
+const { transaction, runTransaction, updateDoc } = vi.hoisted(() => {
   const transaction = {
     get: vi.fn(),
     set: vi.fn(),
     update: vi.fn(),
   };
-  return { transaction, runTransaction: vi.fn((_db, write) => write(transaction)) };
+  return { transaction, runTransaction: vi.fn((_db, write) => write(transaction)), updateDoc: vi.fn() };
 });
 
 vi.mock('../firebase/config.js', () => ({ db: {} }));
 vi.mock('firebase/firestore', () => ({
   runTransaction,
+  updateDoc,
   increment: (amount) => ({ increment: amount }),
   doc: (collection) => ({ collection, id: 'new-document' }),
 }));
+
+it('preserves a legacy emergency fund classification when renaming the goal', async () => {
+  const goal = { id: 'emergency', name: 'Quỹ khẩn cấp', amount: 300 };
+  await saveGoalToFirestore({
+    getDocRef: (collection, id) => ({ collection, id }),
+    payload: { name: 'Dự phòng', amount: 300 },
+    editingId: goal.id,
+    previousGoal: goal,
+  });
+  expect(updateDoc).toHaveBeenCalledWith(
+    { collection: 'goals', id: goal.id },
+    { name: 'Dự phòng', amount: 300, isEmergencyFund: true },
+  );
+});
 
 describe('lockMonthlyFundRepayment', () => {
   const request = {

@@ -2,6 +2,7 @@ import { addDoc, updateDoc, deleteDoc, getDocs, writeBatch, doc, increment, runT
 import { db } from '../firebase/config.js';
 import { getTransactionMonthCollectionNames } from '../../logic/walletCategoryEntities.js';
 import { goalLinkDetachPatch } from '../../logic/goalMovement.js';
+import { isEmergencyGoal } from '../../logic/salaryPicture.js';
 
 const GOAL_DETACH_BATCH_SIZE = 400;
 
@@ -44,16 +45,20 @@ export async function saveGoalToFirestore({
   payload,
   editingId,
   detachLinks = false,
+  previousGoal,
   currentYear = new Date().getFullYear(),
 }) {
+  const goalPayload = isEmergencyGoal(previousGoal) || isEmergencyGoal(payload)
+    ? { ...payload, isEmergencyFund: true }
+    : payload;
   if (editingId) {
-    await updateDoc(getDocRef('goals', editingId), payload);
+    await updateDoc(getDocRef('goals', editingId), goalPayload);
     if (!detachLinks) return { detached: 0 };
     const detached = await detachGoalLinks({ getCollectionRef, goalId: editingId, currentYear });
     return { detached };
   }
   await addDoc(getCollectionRef('goals'), {
-    ...payload,
+    ...goalPayload,
     createdAt: new Date().toISOString(),
   });
 }

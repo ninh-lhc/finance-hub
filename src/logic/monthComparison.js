@@ -1,4 +1,4 @@
-import { buildSalaryPicture, repaymentTotal, unpaidFundOffers, unpaidTransferDebt } from './salaryPicture.js';
+import { buildSalaryPicture, isSalaryExpense, repaymentTotal, subtractFundedSpend, unpaidFundOffers, unpaidTransferDebt } from './salaryPicture.js';
 
 const OPENING_BALANCE = 'Số dư đầu kỳ';
 const TRANSFER_IN = 'Chuyển khoản đến';
@@ -85,12 +85,14 @@ export function buildMonthComparison({
     goals,
     repaid: repaymentTotal(repayments, { year: selectedYear, month: selectedMonth }),
     context,
+    through: `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-31`,
   });
   const previousPicture = buildSalaryPicture({
     transactions: previousTransactions,
     goals,
     repaid: repaymentTotal(repayments, { year: previous.year, month: previous.month }),
     context,
+    through: `${previous.year}-${String(previous.month + 1).padStart(2, '0')}-31`,
   });
   currentPicture.outstandingBorrow = outstandingBorrow ?? (unpaidFundOffers({
     transactions: previousTransactions,
@@ -110,20 +112,27 @@ export function buildMonthComparison({
   const previousIncome = previousPicture.income;
   const previousExpense = previousPicture.expense;
 
-  const monthlyExpenses = Array.from({ length: 12 }, (_, month) => (
-    sumAmounts(filterByYearMonth(yearTransactions, selectedYear, month), isCountedExpense)
-  ));
+  const categoriesFor = (transactions, picture) => subtractFundedSpend(
+    expenseByCategory(transactions.filter((transaction) => isSalaryExpense(transaction, goals))),
+    picture.fundedSpendByCategory,
+  );
+  const currentCategories = categoriesFor(currentTransactions, currentPicture);
+  const previousCategories = categoriesFor(previousTransactions, previousPicture);
+  const yearCategoryTotals = {};
+  const monthlyExpenses = Array.from({ length: 12 }, (_, month) => {
+    const transactions = filterByYearMonth(yearTransactions, selectedYear, month);
+    const categories = month === selectedMonth ? currentCategories : categoriesFor(
+      transactions,
+      buildSalaryPicture({ transactions, goals, context }),
+    );
+    for (const [name, amount] of Object.entries(categories)) {
+      yearCategoryTotals[name] = (yearCategoryTotals[name] || 0) + amount;
+    }
+    return Object.values(categories).reduce((sum, amount) => sum + amount, 0);
+  });
   const monthsWithExpense = monthlyExpenses.filter((value) => value > 0).length;
   const averageDivisor = Math.max(monthsWithExpense, 1);
 
-  const yearCategoryTotals = expenseByCategory(
-    (yearTransactions || []).filter((transaction) => {
-      if (!transaction?.date) return false;
-      return Number(String(transaction.date).split('-')[0]) === selectedYear;
-    }),
-  );
-  const currentCategories = expenseByCategory(currentTransactions);
-  const previousCategories = expenseByCategory(previousTransactions);
   const names = new Set([
     ...Object.keys(currentCategories),
     ...Object.keys(previousCategories),
