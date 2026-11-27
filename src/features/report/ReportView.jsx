@@ -105,6 +105,9 @@ export default function ReportView({
   onOpenLedger,
   handleEditTransaction,
   yearTransactions,
+  history,
+  reimbursementLinks,
+  onMatchReimbursement,
   wallets,
   budgets = [],
   onOpenBudgets,
@@ -177,6 +180,9 @@ export default function ReportView({
       <PeriodOverview
         key={selectedYear}
         transactions={yearTransactions}
+        history={history}
+        reimbursementLinks={reimbursementLinks}
+        onMatchReimbursement={onMatchReimbursement}
         wallets={wallets}
         selectedYear={selectedYear}
         selectedMonth={selectedMonth}

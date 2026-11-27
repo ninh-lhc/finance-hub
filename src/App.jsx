@@ -21,6 +21,7 @@ import TransactionModal from './features/transactions/TransactionModal.jsx';
 import utils from './utils/format.js';
 import { deriveFinanceLogic, deriveTransactionView } from './logic/deriveFinance.js';
 import { buildDataSourceDiagnostics } from './logic/dataSourceDiagnostics.js';
+import { calculateWalletBalances } from './logic/balanceMaintenance.js';
 import { buildMonthComparison, filterByYearMonth, previousPeriod } from './logic/monthComparison.js';
 import { buildMonthReport } from './logic/monthReport.js';
 import { deleteConfirmMessage } from './logic/deleteConfirm.js';
@@ -56,7 +57,7 @@ import {
   lockFundRepayment,
   lockMonthlyFundRepayment,
 } from './services/finance/planningService.js';
-import { monthlyFundRepaymentOffers, unpaidHelpedLocks } from './logic/salaryPicture.js';
+import { buildFinanceContext, isEmergencyGoal, monthlyFundRepaymentOffers, outstandingFundLoans, transactionKey, unpaidHelpedLocks } from './logic/salaryPicture.js';
 import { getTransactionMonthCollectionNames, isCategoryFormReady, hasCategoryNameConflict, hasWalletNameConflict, normalizeCategoryName, normalizeWalletName, canDeleteCategory, canDeleteWallet, canRenameOpeningBalanceCategory } from './logic/walletCategoryEntities.js';
 import {
   saveWalletToFirestore,
@@ -96,12 +97,9 @@ function goalSaveError(result) {
 // ==========================================
 // MAIN APP COMPONENT
 // ==========================================
-function repaymentPlan(offers, cap, prioritizeLargest = true) {
+function repaymentPlan(offers, cap) {
   let remaining = Number(cap || 0);
-  const orderedOffers = prioritizeLargest
-    ? [...offers].sort((left, right) => right.amount - left.amount)
-    : offers;
-  return orderedOffers
+  return offers
     .map((offer) => {
       const amount = Math.min(offer.amount, remaining);
       remaining -= amount;
@@ -110,32 +108,39 @@ function repaymentPlan(offers, cap, prioritizeLargest = true) {
     .filter(Boolean);
 }
 
-async function offerFundAdjustment({ payload, goals, fundRepayments, getCollectionRef, getDocRef }) {
+async function readTransactionHistory(getCollectionRef, throughMonth) {
+  return Promise.all(getTransactionMonthCollectionNames(new Date().getFullYear())
+    .map((name) => ({ name, period: name.slice('transactions_'.length).replace('_', '-') }))
+    .filter(({ period }) => !throughMonth || period <= throughMonth)
+    .map(async ({ name, period }) => {
+      const snap = await getDocs(getCollectionRef(name));
+      return { period, transactions: snap.docs.map((item) => ({ id: item.id, ...item.data() })) };
+    }));
+}
+
+async function offerFundAdjustment({ payload, goals, fundRepayments, reimbursementLinks, getCollectionRef, getDocRef }) {
   const date = String(payload.date || '');
   const year = Number(date.slice(0, 4));
   const month = Number(date.slice(5, 7)) - 1;
   if (!year || month < 0) return;
 
   if (payload.category === 'Lương') {
+    if (!goals.some(isEmergencyGoal)) return;
     const repaymentSnapshot = await getDocs(getCollectionRef('fundRepayments'));
     const repayments = repaymentSnapshot.docs.map((item) => item.data());
     const payMonth = date.slice(0, 7);
     if (repayments.some((item) => item.kind === 'borrow' && item.payDate?.slice(0, 7) === payMonth)) return;
     const repaymentVersion = repaymentSnapshot.docs.find((item) => item.id === 'borrow_state')?.data().latestPayment;
-    const history = await Promise.all(getTransactionMonthCollectionNames(new Date().getFullYear())
-      .map((name) => ({ name, period: name.slice('transactions_'.length).replace('_', '-') }))
-      .filter(({ period }) => period < payMonth)
-      .map(async ({ name, period }) => {
-        const snap = await getDocs(getCollectionRef(name));
-        return { period, transactions: snap.docs.map((item) => ({ id: item.id, ...item.data() })) };
-      }));
+    const history = await readTransactionHistory(getCollectionRef);
     const offers = monthlyFundRepaymentOffers({ history, goals, repayments, payDate: date });
     const outstanding = offers.reduce((sum, item) => sum + item.amount, 0);
     const maximum = Math.floor(Math.min(outstanding, Number(payload.amount)));
     if (maximum < 1) return;
 
     const suggested = Math.min(maximum, Math.max(1, Math.floor(Number(payload.amount) * 0.1)));
-    let message = `Còn nợ quỹ khẩn cấp ${utils.formatVND(outstanding)}. Nhập số tiền muốn hoàn tháng này (tối đa ${utils.formatVND(maximum)}, chỉ nhập chữ số).`;
+    const destinationWallets = [...new Set(offers.map((offer) => goals.find((goal) => goal.id === offer.goalId)?.wallet).filter((wallet) => wallet && wallet !== payload.wallet))];
+    const transferMessage = destinationWallets.length ? ` Nếu hoàn vào quỹ ở ví khác, tiền sẽ chuyển từ ${payload.wallet} sang ví quỹ (${destinationWallets.join(', ')}).` : '';
+    let message = `Còn nợ quỹ khẩn cấp ${utils.formatVND(outstanding)}. Nhập số tiền muốn hoàn tháng này (tối đa ${utils.formatVND(maximum)}, chỉ nhập chữ số).${transferMessage}`;
     for (;;) {
       const input = window.prompt(message, String(suggested))?.trim();
       if (!input) return;
@@ -143,7 +148,7 @@ async function offerFundAdjustment({ payload, goals, fundRepayments, getCollecti
       if (/^\d+$/.test(input) && Number.isSafeInteger(amount) && amount >= 1 && amount <= maximum) {
         await lockMonthlyFundRepayment({
           getCollectionRef, getDocRef, repaymentVersion,
-          plan: repaymentPlan(offers, amount, false), payDate: date,
+          plan: repaymentPlan(offers, amount), payDate: date, sourceWallet: payload.wallet, goals,
         });
         return;
       }
@@ -151,34 +156,25 @@ async function offerFundAdjustment({ payload, goals, fundRepayments, getCollecti
     }
   }
 
-  if (payload.category !== 'Thu nợ/Hoàn ứng') return;
-  const years = [year - 1, year];
-  const snaps = await Promise.all(years.flatMap((itemYear) => (
-    Array.from({ length: 12 }, (_, index) => (
-      getDocs(getCollectionRef(`transactions_${itemYear}_${String(index + 1).padStart(2, '0')}`))
-    ))
-  )));
-  const known = snaps.flatMap((snap) => snap.docs.map((item) => ({ id: item.id, ...item.data() })));
-  const plan = repaymentPlan(
-    unpaidHelpedLocks({ transactions: known, goals, repayments: fundRepayments }),
-    payload.amount,
-  );
-  const amount = plan.reduce((sum, item) => sum + item.amount, 0);
+  if (payload.category !== 'Thu nợ/Hoàn ứng' || !goals.some(isEmergencyGoal)) return;
+  const history = await readTransactionHistory(getCollectionRef, date.slice(0, 7));
+  const known = history.flatMap((entry) => entry.transactions).filter((transaction) => transaction.date <= date);
+  const receipt = buildFinanceContext(known, goals, reimbursementLinks).receipt(payload);
+  if (!receipt || Number(receipt.expense.goalDelta) >= 0) return;
+  const goal = goals.find((item) => item.id === receipt.expense.goalId && isEmergencyGoal(item));
+  if (!goal) return;
+  const unpaid = unpaidHelpedLocks({ transactions: known, goals, repayments: fundRepayments })
+    .find((item) => item.goalId === goal.id)?.amount || 0;
+  const amount = Math.min(unpaid, receipt.matched);
   if (amount <= 0) return;
-  const accepted = window.confirm(`Chi hộ lấy từ quỹ khẩn cấp ${utils.formatVND(amount)}. Khóa số này trở lại quỹ?`);
+  const destinationWallet = goal.wallet || payload.wallet;
+  const movement = destinationWallet === payload.wallet ? '' : ` Chuyển từ ${payload.wallet} sang ${destinationWallet}.`;
+  const accepted = window.confirm(`Hoàn ${utils.formatVND(amount)} đã chi hộ từ quỹ khẩn cấp?${movement}`);
   if (!accepted) return;
-  for (const item of plan) {
-    await lockFundRepayment({
-      getCollectionRef,
-      getDocRef,
-      goalId: item.goalId,
-      amount: item.amount,
-      debtYear: year,
-      debtMonth: month,
-      payDate: date,
-      kind: 'helped',
-    });
-  }
+  await lockFundRepayment({
+    getCollectionRef, getDocRef, goalId: goal.id, amount, debtYear: year, debtMonth: month,
+    payDate: date, kind: 'helped', receiptId: payload.id, sourceWallet: payload.wallet, destinationWallet,
+  });
 }
 
 export default function App() {
@@ -224,7 +220,7 @@ export default function App() {
   const [annualRefreshTick, setAnnualRefreshTick] = useState(0);
 
   const { categories, wallets, walletBalances } = useFinanceSettings({ user, getDocRef, syncCode });
-  const { transactions, goals, budgets, fundRepayments } = useMonthlyFinanceData({
+  const { transactions, transactionsReady, goals, budgets, fundRepayments, reimbursementLinks } = useMonthlyFinanceData({
     user,
     syncCode,
     selectedYear,
@@ -366,6 +362,42 @@ export default function App() {
   // ==========================================
   // 6. BUSINESS LOGIC (USEMEMO)
   // ==========================================
+  const [transactionHistory, setTransactionHistory] = useState(null);
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    readTransactionHistory(getCollectionRef).then((history) => {
+      if (active) setTransactionHistory({ source: getCollectionRef, history });
+    }).catch((error) => console.error('Không tải được lịch sử giao dịch', error));
+    return () => { active = false; };
+  }, [user, getCollectionRef, annualRefreshTick]);
+
+  const history = useMemo(() => {
+    if (transactionHistory?.source !== getCollectionRef) return null;
+    if (!transactionsReady) return transactionHistory.history;
+    const period = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
+    return transactionHistory.history.map((entry) => entry.period === period ? { period, transactions } : entry);
+  }, [transactionHistory, getCollectionRef, selectedYear, selectedMonth, transactionsReady, transactions]);
+  const financeContext = useMemo(() => history
+    ? buildFinanceContext(history.flatMap((entry) => entry.transactions), goals, reimbursementLinks)
+    : undefined, [history, goals, reimbursementLinks]);
+  const outstandingBorrow = useMemo(() => {
+    if (!history) return undefined;
+    const period = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
+    const today = utils.getLocalYMD();
+    const through = period === today.slice(0, 7) ? today : `${period}-31`;
+    return outstandingFundLoans({ history, goals, repayments: fundRepayments, through })
+      .reduce((sum, item) => sum + item.amount, 0);
+  }, [history, goals, fundRepayments, selectedYear, selectedMonth]);
+  const walletBalanceDifferences = useMemo(() => {
+    if (activeTab !== 'settings' || !history) return [];
+    const ledger = calculateWalletBalances({ wallets, transactions: history.flatMap((entry) => entry.transactions) });
+    return wallets.flatMap((wallet) => {
+      const stored = Number(walletBalances[wallet] || 0);
+      const expected = ledger[wallet];
+      return stored === expected ? [] : [{ wallet, stored, expected }];
+    });
+  }, [activeTab, history, wallets, walletBalances]);
   
   const coreLogic = useMemo(
     () =>
@@ -382,8 +414,10 @@ export default function App() {
         goals,
         budgets,
         fundRepayments,
+        outstandingBorrow,
+        context: financeContext,
       }),
-    [transactions, annualTransactions, previousBoundaryTransactions, walletBalances, selectedMonth, selectedYear, wallets, categories, annualSelectedMonth, goals, budgets, fundRepayments],
+    [transactions, annualTransactions, previousBoundaryTransactions, walletBalances, selectedMonth, selectedYear, wallets, categories, annualSelectedMonth, goals, budgets, fundRepayments, outstandingBorrow, financeContext],
   );
 
   const monthComparison = useMemo(() => {
@@ -400,6 +434,8 @@ export default function App() {
       ready: comparisonReady,
       goals,
       repayments: fundRepayments,
+      outstandingBorrow,
+      context: financeContext,
     });
   }, [
     transactions,
@@ -410,6 +446,8 @@ export default function App() {
     comparisonReady,
     goals,
     fundRepayments,
+    outstandingBorrow,
+    financeContext,
   ]);
 
   const monthReport = useMemo(() => {
@@ -427,6 +465,7 @@ export default function App() {
       samePeriodReady,
       goals,
       repayments: fundRepayments,
+      context: financeContext,
     });
   }, [
     transactions,
@@ -439,6 +478,7 @@ export default function App() {
     selectedMonth,
     comparisonReady,
     samePeriodReady,
+    financeContext,
   ]);
 
   const viewLogic = useMemo(
@@ -598,6 +638,7 @@ export default function App() {
       let payload = { ...formData, amount: Number(formData.amount || 0), target: Number(formData.target || 0), isSample: false };
       
       const originalTx = payload.originalTx;
+      let savedTransactionId;
       delete payload.originalTx;
       
       if (modalType === 'TRANSACTION') {
@@ -637,7 +678,7 @@ export default function App() {
               return;
           }
           
-          await saveTransactionToFirestore({
+          savedTransactionId = await saveTransactionToFirestore({
             getCollectionRef,
             getDocRef,
             payload,
@@ -654,9 +695,10 @@ export default function App() {
       if (modalType === 'TRANSACTION' && !editingTxId && payload.type === 'INCOME') {
         try {
           await offerFundAdjustment({
-            payload,
+            payload: { ...payload, id: savedTransactionId },
             goals,
             fundRepayments,
+            reimbursementLinks,
             getCollectionRef,
             getDocRef,
           });
@@ -839,7 +881,6 @@ export default function App() {
             }
 
             const payloads = deduped.rows;
-            const totalImpact = sumImportImpact(payloads);
             const { newWallets, newIncCats, newExpCats } = parsed;
             const validCount = payloads.length;
             const lastImportedDate = payloads.reduce((latest, row) => {
@@ -855,24 +896,16 @@ export default function App() {
                     const docRef = doc(getCollectionRef(p.col));
                     batch.set(docRef, p.data);
                 });
+                const walletBalances = Object.fromEntries(Object.entries(sumImportImpact(chunk))
+                  .filter(([, delta]) => delta !== 0)
+                  .map(([wallet, delta]) => [wallet, increment(delta)]));
+                batch.set(getDocRef('settings', 'general'), {
+                    wallets: newWallets,
+                    categories: { INCOME: newIncCats, EXPENSE: newExpCats },
+                    ...(Object.keys(walletBalances).length ? { walletBalances } : {}),
+                }, { merge: true });
                 await batch.commit();
             }
-
-            const walletUpdates = {};
-            Object.keys(totalImpact).forEach(w => {
-                if (totalImpact[w] !== 0) walletUpdates[w] = increment(totalImpact[w]);
-            });
-
-            const wbUpdates = {
-                wallets: newWallets,
-                categories: { INCOME: newIncCats, EXPENSE: newExpCats },
-            };
-            
-            if (Object.keys(walletUpdates).length > 0) {
-                wbUpdates.walletBalances = walletUpdates;
-            }
-            
-            await setDoc(getDocRef('settings', 'general'), wbUpdates, { merge: true });
 
             if (lastImportedDate) {
                 const [lastY, lastM] = lastImportedDate.split('-');
@@ -1150,6 +1183,20 @@ export default function App() {
               setSelectedYear={setSelectedYear}
               handleEditTransaction={handleEditTransaction}
               yearTransactions={annualTransactions}
+              history={history}
+              reimbursementLinks={reimbursementLinks}
+              onMatchReimbursement={async (receipt, expense) => {
+                const receiptKey = transactionKey(receipt);
+                try {
+                  await setDoc(getDocRef('reimbursementLinks', receiptKey), {
+                    receiptKey, expenseKey: transactionKey(expense),
+                  });
+                  showToast('Đã đối chiếu khoản hoàn ứng.', 'success');
+                } catch (error) {
+                  console.error(error);
+                  showToast('Chưa lưu được liên kết hoàn ứng.', 'error');
+                }
+              }}
               wallets={wallets}
               budgets={budgets}
               goals={goals}
@@ -1184,6 +1231,7 @@ export default function App() {
               handleEditTransaction={handleEditTransaction}
               previousYearTransactions={previousYearTransactions}
               previousYearReady={previousYearReady}
+              context={financeContext}
               goals={goals}
               fundRepayments={fundRepayments}
             />
@@ -1225,6 +1273,7 @@ export default function App() {
               appearance={appearance}
               setAppearance={setAppearance}
               dataSourceDiagnostics={dataSourceDiagnostics}
+              walletBalanceDifferences={walletBalanceDifferences}
               legacyMigrationReadiness={legacyMigrationReadiness}
               legacyMigrationInspection={legacyMigrationInspection}
               isInspectingLegacyMigration={isInspectingLegacyMigration}

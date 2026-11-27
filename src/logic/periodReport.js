@@ -3,7 +3,7 @@ import {
   isCountedExpense,
   isCountedIncome,
 } from './monthComparison.js';
-import { buildSalaryPicture, isSalaryExpense, listFlowItems, repaymentTotal, subtractFundedSpend } from './salaryPicture.js';
+import { buildFinanceContext, buildSalaryPicture, isSalaryExpense, listFlowItems, outstandingFundLoans, repaymentTotal, subtractFundedSpend } from './salaryPicture.js';
 
 const TREND_LIMIT = 6;
 const TOP_EXPENSE_LIMIT = 10;
@@ -88,11 +88,12 @@ function totalsBy(transactions, predicate, keyOf) {
   return totals;
 }
 
-function pictureFor(transactions, goals, repayments, from, to) {
+function pictureFor(transactions, goals, repayments, from, to, context) {
   return buildSalaryPicture({
     transactions,
     goals,
     repaid: repaymentTotal(repayments, { from, to }),
+    context,
   });
 }
 
@@ -103,6 +104,8 @@ export function buildPeriodReport({
   wallet = 'ALL',
   goals = [],
   repayments = [],
+  history,
+  reimbursementLinks,
 } = {}) {
   const range = orderedRange(from, to);
   const period = (transactions || []).filter((transaction) => {
@@ -110,11 +113,22 @@ export function buildPeriodReport({
     if (wallet && wallet !== 'ALL' && transactionWallet(transaction) !== wallet) return false;
     return true;
   });
-  const summary = pictureFor(period, goals, repayments, range.from, range.to);
+  const context = buildFinanceContext(history ? history.flatMap((entry) => entry.transactions) : transactions, goals, reimbursementLinks);
+  const scopedRepayments = wallet === 'ALL' ? repayments : repayments.filter((item) => (
+    (item.sourceWallet || goals.find((goal) => goal.id === item.goalId)?.wallet) === wallet
+  ));
+  const summary = pictureFor(period, goals, scopedRepayments, range.from, range.to, context);
+  if (history) {
+    const scopedGoals = wallet === 'ALL' ? goals : goals.filter((goal) => goal.wallet === wallet);
+    summary.outstandingBorrow = outstandingFundLoans({ history, goals: scopedGoals, repayments, through: range.to })
+      .reduce((sum, item) => sum + item.amount, 0);
+  }
   const months = monthsInRange(range.from, range.to);
   const monthly = months.map((key) => {
     const monthTransactions = period.filter((transaction) => String(transaction.date || '').startsWith(key));
-    const monthSummary = pictureFor(monthTransactions, goals, repayments, `${key}-01`, `${key}-31`);
+    const from = range.from.startsWith(key) ? range.from : `${key}-01`;
+    const to = range.to.startsWith(key) ? range.to : `${key}-31`;
+    const monthSummary = pictureFor(monthTransactions, goals, scopedRepayments, from, to, context);
     return {
       key,
       label: `${key.slice(5)}/${key.slice(2, 4)}`,
@@ -126,7 +140,7 @@ export function buildPeriodReport({
   });
   const monthCount = Math.max(months.length, 1);
   const dayCount = inclusiveDayCount(range.from, range.to);
-  const flow = listFlowItems(period, goals);
+  const flow = listFlowItems(period, goals, context);
   const personalExpenses = period.filter((transaction) => isSalaryExpense(transaction, goals));
   const personalIncome = period.filter((transaction) => isCountedIncome(transaction) && transaction.category !== 'Thu nợ/Hoàn ứng');
   const expenseCategories = shareRows(
@@ -134,7 +148,7 @@ export function buildPeriodReport({
     summary.expense,
   );
   const incomeTotals = totalsBy(personalIncome, () => true, (transaction) => transaction.category || 'Khác');
-  if (summary.commission > 0) incomeTotals['Hoa hồng'] = summary.commission;
+  if (summary.commission > 0) incomeTotals['Hoa hồng'] = (incomeTotals['Hoa hồng'] || 0) + summary.commission;
   const incomeCategories = shareRows(incomeTotals, summary.income);
   const walletExpenses = shareRows(
     subtractFundedSpend(totalsBy(personalExpenses, () => true, transactionWallet), summary.fundedSpendByWallet),
@@ -153,12 +167,8 @@ export function buildPeriodReport({
       return Math.max(0, raw - funded);
     }),
   }));
-  const fundedOnTransaction = new Map();
-  (flow.spends || []).forEach((item) => {
-    fundedOnTransaction.set(item.transaction, (fundedOnTransaction.get(item.transaction) || 0) + item.amount);
-  });
   const expenseRows = personalExpenses.flatMap((transaction) => {
-    const amount = Number(transaction.amount || 0) - (fundedOnTransaction.get(transaction) || 0);
+    const amount = Number(transaction.amount || 0) - context.funded(transaction);
     return amount > 0 ? [drillRow(transaction, amount)] : [];
   });
   const incomeRows = personalIncome.map((transaction) => drillRow(transaction, transaction.amount));
@@ -168,23 +178,16 @@ export function buildPeriodReport({
     wallet: groupDrillRows(expenseRows, (row) => row.wallet),
   };
   if (summary.commission > 0) {
-    drilldown.income['Hoa hồng'] = flow.reimbursements.map((item) => drillRow(item.transaction, item.amount));
+    const commissions = flow.reimbursements.flatMap(({ transaction }) => {
+      const amount = context.receipt(transaction)?.commission || 0;
+      return amount > 0 ? [drillRow(transaction, amount)] : [];
+    });
+    drilldown.income['Hoa hồng'] = [...(drilldown.income['Hoa hồng'] || []), ...commissions];
   }
 
-  const topExpenses = personalExpenses
-    .slice()
-    .sort((left, right) => Number(right.amount || 0) - Number(left.amount || 0)
-      || String(right.date || '').localeCompare(String(left.date || '')))
-    .slice(0, TOP_EXPENSE_LIMIT)
-    .map((transaction) => ({
-      id: transaction.id,
-      date: transaction.date,
-      note: transaction.note || '',
-      category: transaction.category || 'Khác',
-      wallet: transactionWallet(transaction),
-      amount: Number(transaction.amount || 0),
-      transaction,
-    }));
+  const topExpenses = expenseRows
+    .sort((left, right) => right.amount - left.amount || right.date.localeCompare(left.date))
+    .slice(0, TOP_EXPENSE_LIMIT);
 
   return {
     from: range.from,

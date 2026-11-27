@@ -41,6 +41,7 @@ export default function SettingsView(props) {
     appearance,
     setAppearance,
     dataSourceDiagnostics,
+    walletBalanceDifferences = [],
     legacyMigrationReadiness,
     legacyMigrationInspection,
     isInspectingLegacyMigration,
@@ -175,6 +176,16 @@ export default function SettingsView(props) {
               </button>
             </div>
 
+            {walletBalanceDifferences.length > 0 && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm">
+                <h4 className="font-semibold">Số dư lệch so với lịch sử đã tải</h4>
+                <ul className="mt-2 space-y-1">
+                  {walletBalanceDifferences.map(({ wallet, stored, expected }) => (
+                    <li key={wallet}>{wallet} · Đang lưu {utils.formatVND(stored)} · Theo giao dịch {utils.formatVND(expected)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="flex gap-4 p-5 bg-[#F8F9FA] rounded-[24px] border border-gray-100">
               <input type="text" placeholder="Tên ví mới (VD: Ví Momo, Techcombank...)" className="bg-transparent font-black text-[#1B2559] outline-none flex-1 text-xs" value={settingsForm.walletName} onChange={(e) => setSettingsForm({...settingsForm, walletName: e.target.value})} />
               <button onClick={handleSaveWallet} className="w-12 h-12 bg-[#4318FF] rounded-xl flex items-center justify-center text-white shadow-xl transition-all"><Plus size={20}/></button>

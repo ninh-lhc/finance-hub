@@ -75,22 +75,45 @@ export async function lockFundRepayment({
   debtMonth,
   payDate,
   kind,
+  sourceWallet,
+  destinationWallet,
+  receiptId,
 }) {
-  const batch = writeBatch(db);
-  batch.update(getDocRef('goals', goalId), { amount: increment(Number(amount || 0)) });
-  batch.set(doc(getCollectionRef('fundRepayments')), {
-    goalId,
-    amount: Number(amount || 0),
-    debtYear,
-    debtMonth,
-    payDate,
-    kind,
-    createdAt: new Date().toISOString(),
+  const repaymentRef = getDocRef('fundRepayments', `helped_${receiptId}`);
+  return runTransaction(db, async (transaction) => {
+    if ((await transaction.get(repaymentRef)).exists()) return;
+    writeFundPayment(transaction, {
+      getCollectionRef, getDocRef, repaymentRef, goalId, amount, debtYear, debtMonth, payDate,
+      kind, sourceWallet, destinationWallet, createdAt: new Date().toISOString(),
+    });
   });
-  await batch.commit();
 }
 
-export async function lockMonthlyFundRepayment({ getCollectionRef, getDocRef, plan, payDate, repaymentVersion }) {
+function writeFundPayment(transaction, {
+  getCollectionRef, getDocRef, repaymentRef, goalId, amount, debtYear, debtMonth,
+  payDate, kind, sourceWallet, destinationWallet, createdAt,
+}) {
+  transaction.update(getDocRef('goals', goalId), { amount: increment(amount) });
+  transaction.set(repaymentRef, {
+    goalId, amount, debtYear, debtMonth, payDate, kind, sourceWallet, destinationWallet, createdAt,
+  });
+  if (sourceWallet === destinationWallet) return;
+
+  const collectionRef = getCollectionRef(`transactions_${payDate.slice(0, 7).replace('-', '_')}`);
+  const transfer = { amount, date: payDate, createdAt, transferId: repaymentRef.id, fundRepaymentId: repaymentRef.id, note: 'Hoàn quỹ khẩn cấp' };
+  transaction.set(doc(collectionRef), {
+    ...transfer, type: 'EXPENSE', category: 'Chuyển khoản đi', wallet: sourceWallet,
+  });
+  transaction.set(doc(collectionRef), {
+    ...transfer, type: 'INCOME', category: 'Chuyển khoản đến', wallet: destinationWallet,
+    goalId, goalDelta: amount,
+  });
+  transaction.set(getDocRef('settings', 'general'), {
+    walletBalances: { [sourceWallet]: increment(-amount), [destinationWallet]: increment(amount) },
+  }, { merge: true });
+}
+
+export async function lockMonthlyFundRepayment({ getCollectionRef, getDocRef, plan, payDate, repaymentVersion, sourceWallet, goals }) {
   const monthlyRef = getDocRef('fundRepayments', `borrow_${payDate.slice(0, 7)}`);
   const stateRef = getDocRef('fundRepayments', 'borrow_state');
   const createdAt = new Date().toISOString();
@@ -102,12 +125,11 @@ export async function lockMonthlyFundRepayment({ getCollectionRef, getDocRef, pl
     }
 
     plan.forEach((item, index) => {
-      transaction.update(getDocRef('goals', item.goalId), { amount: increment(item.amount) });
-      transaction.set(index === 0 ? monthlyRef : doc(getCollectionRef('fundRepayments')), {
-        ...item,
-        payDate,
-        kind: 'borrow',
-        createdAt,
+      const repaymentRef = index === 0 ? monthlyRef : doc(getCollectionRef('fundRepayments'));
+      const destinationWallet = goals.find((goal) => goal.id === item.goalId)?.wallet || sourceWallet;
+      writeFundPayment(transaction, {
+        getCollectionRef, getDocRef, repaymentRef, ...item, payDate, kind: 'borrow',
+        sourceWallet, destinationWallet, createdAt,
       });
     });
     transaction.set(stateRef, { latestPayment: monthlyRef.id });

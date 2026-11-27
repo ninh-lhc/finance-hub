@@ -45,7 +45,7 @@ function coverFundTransfers(transactions, goals) {
       incomingByTransfer.set(transaction.transferId, transaction);
     }
     if (isFundTransferOut(transaction, goals)) outs.push(transaction);
-    if (isFundTransferIn(transaction, goals)) transferRepaid += Number(transaction.amount || 0);
+    if (isFundTransferIn(transaction, goals) && !transaction.fundRepaymentId) transferRepaid += Number(transaction.amount || 0);
   });
 
   const transfers = outs.map((out) => {
@@ -109,8 +109,9 @@ export function subtractFundedSpend(totals, funded) {
   return next;
 }
 
-function transactionKey(transaction) {
-  return transaction?.id || `${transaction?.date}|${transaction?.transferId || ''}|${transaction?.category}|${transaction?.wallet}|${transaction?.amount}|${transaction?.goalDelta || 0}`;
+export function transactionKey(transaction) {
+  return transaction?.id ? transaction.id
+    : `${transaction?.date}|${transaction?.transferId || ''}|${transaction?.category}|${transaction?.wallet}|${transaction?.amount}|${transaction?.goalDelta || 0}`;
 }
 
 export function unpaidTransferDebt({ pastTransactions = [], laterTransactions = [], goals = [], year, month } = {}) {
@@ -153,7 +154,7 @@ export function repaymentTotal(repayments, { year, month, from, to } = {}) {
   }, 0);
 }
 
-export function buildSalaryPicture({ transactions = [], goals = [], repaid = 0 } = {}) {
+export function buildSalaryPicture({ transactions = [], goals = [], repaid = 0, context } = {}) {
   const funds = emergencyIds(goals);
   let otherIncome = 0;
   let reimbursement = 0;
@@ -191,12 +192,30 @@ export function buildSalaryPicture({ transactions = [], goals = [], repaid = 0 }
   });
 
   const coverage = coverFundTransfers(transactions, goals);
+  if (context) {
+    coverage.excluded = 0;
+    coverage.byCategory = {};
+    coverage.byWallet = {};
+    for (const transaction of transactions) {
+      const funded = context.funded(transaction);
+      if (!funded) continue;
+      const category = transaction.category || 'Khác';
+      const wallet = transaction.linkedWallet || transaction.wallet;
+      coverage.excluded += funded;
+      coverage.byCategory[category] = (coverage.byCategory[category] || 0) + funded;
+      coverage.byWallet[wallet] = (coverage.byWallet[wallet] || 0) + funded;
+    }
+  }
   personalExpense = Math.max(0, personalExpense - coverage.excluded);
   fundBorrow += coverage.borrowed;
 
-  const matched = Math.min(helped, reimbursement);
-  const commission = Math.max(0, reimbursement - helped);
-  const unreimbursed = Math.max(0, helped - reimbursement);
+  let matched = Math.min(helped, reimbursement);
+  let commission = Math.max(0, reimbursement - helped);
+  let unreimbursed = Math.max(0, helped - reimbursement);
+  let unmatchedReimbursement = 0;
+  if (context) {
+    ({ matched, commission, unreimbursed, unmatchedReimbursement } = context.reconcile(transactions));
+  }
   const income = otherIncome + commission;
   const expense = personalExpense;
   const repayment = Math.max(0, Number(repaid || 0) + coverage.transferRepaid);
@@ -209,6 +228,7 @@ export function buildSalaryPicture({ transactions = [], goals = [], repaid = 0 }
     matched,
     helped,
     reimbursement,
+    unmatchedReimbursement,
     fundBorrow,
     helpedFromFund,
     fundBorrowByGoal,
@@ -216,6 +236,77 @@ export function buildSalaryPicture({ transactions = [], goals = [], repaid = 0 }
     fundedSpendByCategory: coverage.byCategory,
     fundedSpendByWallet: coverage.byWallet,
     repaid: repayment,
+  };
+}
+
+export function buildFinanceContext(transactions, goals, reimbursementLinks = []) {
+  const funded = new Map();
+  for (const item of coverFundTransfers(transactions, goals).spends) {
+    const key = transactionKey(item.transaction);
+    funded.set(key, (funded.get(key) || 0) + item.amount);
+  }
+  const open = [];
+  const receipts = new Map();
+  const links = new Map(reimbursementLinks.map(({ receiptKey, expenseKey }) => [receiptKey, expenseKey]));
+  const reserved = new Set(links.values());
+  const ordered = [...transactions].sort((left, right) => String(left.date).localeCompare(String(right.date))
+    || Number(left.type === 'INCOME') - Number(right.type === 'INCOME'));
+  for (const transaction of ordered) {
+    const amount = Number(transaction.amount || 0);
+    if (amount <= 0) continue;
+    if (transaction.type === 'EXPENSE' && transaction.category === PASS_THROUGH_EXPENSE) {
+      open.push({ transaction, remaining: amount, payments: [] });
+    }
+    if (transaction.type !== 'INCOME' || transaction.category !== PASS_THROUGH_INCOME) continue;
+    const note = fold(transaction.note).trim();
+    const receiptKey = transactionKey(transaction);
+    const linkedExpense = links.get(receiptKey);
+    const candidates = open.filter((item) => item.remaining > 0 && !reserved.has(transactionKey(item.transaction)));
+    const byNote = note ? candidates.filter((item) => fold(item.transaction.note).trim() === note) : [];
+    const matches = linkedExpense
+      ? open.filter((item) => item.remaining > 0 && transactionKey(item.transaction) === linkedExpense)
+      : byNote.length ? byNote : candidates.filter((item) => item.remaining === amount);
+    if (matches.length !== 1) continue;
+    const [match] = matches;
+    const matched = Math.min(amount, match.remaining);
+    match.remaining -= matched;
+    match.payments.push({ date: transaction.date, amount: matched });
+    receipts.set(receiptKey, { matched, commission: amount - matched, expense: match.transaction });
+  }
+  const expenses = new Map(open.map((item) => [transactionKey(item.transaction), item]));
+
+  return {
+    funded: (transaction) => funded.get(transactionKey(transaction)) || 0,
+    receipt: (transaction) => receipts.get(transactionKey(transaction)),
+    candidates: (receipt) => open.filter(({ transaction, payments }) => transaction.date <= receipt.date
+      && Number(transaction.amount) > payments.filter((payment) => payment.date <= receipt.date)
+        .reduce((sum, payment) => sum + payment.amount, 0))
+      .map(({ transaction }) => transaction),
+    reconcile(scope) {
+      let matched = 0;
+      let commission = 0;
+      let unreimbursed = 0;
+      let unmatchedReimbursement = 0;
+      const through = scope.reduce((latest, transaction) => transaction.date > latest ? transaction.date : latest, '');
+      for (const transaction of scope) {
+        const key = transactionKey(transaction);
+        const expense = expenses.get(key);
+        if (expense) {
+          const paid = expense.payments.filter((payment) => payment.date <= through)
+            .reduce((sum, payment) => sum + payment.amount, 0);
+          unreimbursed += Number(transaction.amount || 0) - paid;
+        }
+        if (transaction.type !== 'INCOME' || transaction.category !== PASS_THROUGH_INCOME) continue;
+        const receipt = receipts.get(key);
+        if (receipt) {
+          matched += receipt.matched;
+          commission += receipt.commission;
+        } else {
+          unmatchedReimbursement += Number(transaction.amount || 0);
+        }
+      }
+      return { matched, commission, unreimbursed, unmatchedReimbursement };
+    },
   };
 }
 
@@ -241,14 +332,60 @@ export function monthlyFundRepaymentOffers({ history, goals, repayments, payDate
     return [];
   }
 
-  return [...history]
-    .filter(({ period }) => period < payMonth)
-    .sort((left, right) => left.period.localeCompare(right.period))
-    .flatMap(({ period, transactions }) => {
-      const [year, month] = period.split('-').map(Number);
-      return unpaidFundOffers({ transactions, goals, repayments, year, month: month - 1 })
-        .map((offer) => ({ ...offer, debtYear: year, debtMonth: month - 1 }));
-    });
+  const inputs = { history, goals, repayments, beforeMonth: payMonth };
+  const dueAtPayDate = outstandingFundLoans({ ...inputs, through: payDate });
+  const remaining = outstandingFundLoans({ ...inputs, through: '9999-12-31' });
+  return dueAtPayDate.flatMap((loan) => {
+    const current = remaining.find((item) => (
+      item.goalId === loan.goalId && item.debtYear === loan.debtYear && item.debtMonth === loan.debtMonth
+    ));
+    return current ? [{ ...loan, amount: Math.min(loan.amount, current.amount) }] : [];
+  });
+}
+
+export function outstandingFundLoans({ history, goals, repayments, through, beforeMonth = '' }) {
+  const events = [];
+  const funds = emergencyIds(goals);
+  for (const { period, transactions } of history) {
+    for (const transaction of transactions) {
+      const date = transaction.date || `${period}-01`;
+      if (date > through || !funds.has(transaction.goalId)) continue;
+      if ((isFundBorrow(transaction, goals) || isFundTransferOut(transaction, goals))
+        && (!beforeMonth || period < beforeMonth)) {
+        events.push({ date, period, goalId: transaction.goalId, amount: Number(transaction.amount), order: 0 });
+      } else if (isFundTransferIn(transaction, goals) && !transaction.fundRepaymentId) {
+        events.push({ date, goalId: transaction.goalId, amount: Number(transaction.amount), order: 1 });
+      }
+    }
+  }
+  for (const item of repayments) {
+    if (item.kind !== 'borrow' || !item.payDate || item.payDate > through) continue;
+    const period = `${item.debtYear}-${String(Number(item.debtMonth) + 1).padStart(2, '0')}`;
+    events.push({ date: item.payDate, period, goalId: item.goalId, amount: Number(item.amount), order: 2 });
+  }
+
+  const balances = new Map();
+  for (const event of events.sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order)) {
+    const key = `${event.period}|${event.goalId}`;
+    if (event.order === 0) {
+      const [year, month] = event.period.split('-').map(Number);
+      const loan = balances.get(key) || { goalId: event.goalId, amount: 0, debtYear: year, debtMonth: month - 1 };
+      loan.amount += event.amount;
+      balances.set(key, loan);
+    } else if (event.order === 2) {
+      const loan = balances.get(key);
+      if (loan) loan.amount = Math.max(0, loan.amount - event.amount);
+    } else {
+      let remaining = event.amount;
+      for (const loan of balances.values()) {
+        if (loan.goalId !== event.goalId || remaining <= 0) continue;
+        const applied = Math.min(loan.amount, remaining);
+        loan.amount -= applied;
+        remaining -= applied;
+      }
+    }
+  }
+  return [...balances.values()].filter((loan) => loan.amount > 0);
 }
 
 export function unpaidHelpedLocks({ transactions, goals, repayments }) {
@@ -279,7 +416,7 @@ function byRecent(left, right) {
     || right.amount - left.amount;
 }
 
-export function listFlowItems(transactions = [], goals = []) {
+export function listFlowItems(transactions = [], goals = [], context) {
   const helped = [];
   const reimbursements = [];
   const directSpends = [];
@@ -288,7 +425,11 @@ export function listFlowItems(transactions = [], goals = []) {
     const amount = Number(transaction?.amount || 0);
     if (!amount) return;
     if (isCountedIncome(transaction) && transaction.category === PASS_THROUGH_INCOME) {
-      reimbursements.push(flowEntry(transaction, amount));
+      const unmatched = Boolean(context && !context.receipt(transaction));
+      reimbursements.push(flowEntry(transaction, amount, {
+        unmatched,
+        candidates: unmatched ? context.candidates(transaction) : [],
+      }));
     }
     if (isCountedExpense(transaction) && transaction.category === PASS_THROUGH_EXPENSE) {
       helped.push(flowEntry(transaction, amount, { fromFund: funds.has(transaction.goalId) && Number(transaction.goalDelta || 0) < 0 }));
@@ -296,15 +437,20 @@ export function listFlowItems(transactions = [], goals = []) {
     if (isFundBorrow(transaction, goals)) directSpends.push(flowEntry(transaction, amount));
   });
   const coverage = coverFundTransfers(transactions, goals);
+  const fundedSpends = context ? transactions.flatMap((transaction) => {
+    const amount = context.funded(transaction);
+    return amount > 0 ? [{ transaction, amount }] : [];
+  }) : coverage.spends;
+  const fundedTotal = fundedSpends.reduce((sum, item) => sum + item.amount, 0);
   const directTotal = directSpends.reduce((sum, item) => sum + item.amount, 0);
   return {
     helped: helped.sort(byRecent),
     reimbursements: reimbursements.sort(byRecent),
     transfers: coverage.transfers.map((item) => flowEntry(item.transaction, item.amount, { toWallet: item.toWallet })).sort(byRecent),
-    spends: [...directSpends, ...coverage.spends.map((item) => flowEntry(item.transaction, item.amount))].sort(byRecent),
+    spends: [...directSpends, ...fundedSpends.map((item) => flowEntry(item.transaction, item.amount))].sort(byRecent),
     repayments: coverage.repayments.map((transaction) => flowEntry(transaction, transaction.amount)).sort(byRecent),
-    spent: directTotal + coverage.excluded,
-    remainder: Math.max(0, coverage.borrowed - coverage.excluded),
+    spent: directTotal + fundedTotal,
+    remainder: Math.max(0, coverage.borrowed - fundedTotal),
   };
 }
 

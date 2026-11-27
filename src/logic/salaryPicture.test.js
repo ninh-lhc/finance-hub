@@ -6,6 +6,8 @@ import {
   listFlowItems,
   unpaidFundOffers,
   monthlyFundRepaymentOffers,
+  outstandingFundLoans,
+  buildFinanceContext,
   unpaidTransferDebt,
 } from './salaryPicture.js';
 
@@ -114,6 +116,38 @@ describe('buildSalaryPicture', () => {
     })).toEqual([]);
   });
 
+  it('shows new borrowing after a monthly payment and proposes the older balance first next month', () => {
+    const borrow = (date, amount) => tx({
+      type: 'EXPENSE', category: 'Mua sắm', date, amount, goalId: 'emergency', goalDelta: -amount,
+    });
+    const history = [
+      { period: '2026-11', transactions: [borrow('2026-11-20', 4_000_000)] },
+      { period: '2026-12', transactions: [borrow('2026-12-15', 1_000_000)] },
+    ];
+    const novemberDebt = { goalId: 'emergency', debtYear: 2026, debtMonth: 10 };
+    const decemberDebt = { goalId: 'emergency', debtYear: 2026, debtMonth: 11 };
+    const repayments = [{ ...novemberDebt, kind: 'borrow', amount: 2_000_000, payDate: '2026-12-05' }];
+    const options = { history, goals, repayments };
+    const remaining = [
+      { ...novemberDebt, amount: 2_000_000 },
+      { ...decemberDebt, amount: 1_000_000 },
+    ];
+
+    expect(outstandingFundLoans({ ...options, through: '2026-12-14' })).toEqual(remaining.slice(0, 1));
+    expect(outstandingFundLoans({ ...options, through: '2026-12-31' })).toEqual(remaining);
+    expect(monthlyFundRepaymentOffers({ ...options, payDate: '2026-12-20' })).toEqual([]);
+    expect(monthlyFundRepaymentOffers({ ...options, payDate: '2027-01-05' })).toEqual(remaining);
+    expect(outstandingFundLoans({
+      ...options,
+      through: '2027-01-05',
+      repayments: [
+        ...repayments,
+        { ...novemberDebt, kind: 'borrow', amount: 2_000_000, payDate: '2027-01-05' },
+        { ...decemberDebt, kind: 'borrow', amount: 500_000, payDate: '2027-01-05' },
+      ],
+    })).toEqual([{ ...decemberDebt, amount: 500_000 }]);
+  });
+
   it('owes the full fund transfer and leaves the unspent remainder out of income', () => {
     const picture = buildSalaryPicture({
       goals,
@@ -130,6 +164,46 @@ describe('buildSalaryPicture', () => {
     expect(picture.income).toBe(0);
     expect(picture.fundedSpendByCategory).toEqual({ 'Mua sắm': 1_352_254 });
     expect(picture.fundBorrowByGoal).toEqual({});
+  });
+
+  it('reconciles old transfers, manual returns and installment records without counting a paired return twice', () => {
+    const history = [
+      { period: '2026-09', transactions: Object.freeze([Object.freeze(tx({
+        type: 'EXPENSE', category: 'Chuyển khoản đi', date: '2026-09-01',
+        goalId: 'emergency', goalDelta: -1000, amount: 1000,
+      }))]) },
+      { period: '2026-10', transactions: [
+        tx({ type: 'INCOME', category: 'Chuyển khoản đến', date: '2026-10-01', goalId: 'emergency', goalDelta: 200, amount: 200 }),
+        tx({ type: 'INCOME', category: 'Chuyển khoản đến', date: '2026-10-05', goalId: 'emergency', goalDelta: 300, amount: 300, fundRepaymentId: 'installment' }),
+      ] },
+    ];
+    const repayments = [
+      { kind: 'borrow', goalId: 'emergency', debtYear: 2026, debtMonth: 8, amount: 300, payDate: '2026-10-05' },
+    ];
+    const options = { history, goals, repayments };
+    expect(outstandingFundLoans({ ...options, through: '2026-10-02' })[0].amount).toBe(800);
+    expect(monthlyFundRepaymentOffers({ ...options, payDate: '2026-11-01' })[0].amount).toBe(500);
+    expect(monthlyFundRepaymentOffers({
+      ...options,
+      payDate: '2026-10-02',
+      repayments: [{ ...repayments[0], amount: 800 }],
+    })).toEqual([]);
+    expect(buildSalaryPicture({ transactions: history[1].transactions, goals, repaid: 300 }).repaid).toBe(500);
+  });
+
+  it('keeps ambiguous reimbursements unmatched until a separate link resolves them', () => {
+    const first = tx({ id: 'first', type: 'EXPENSE', category: 'Chi hộ', date: '2026-10-01', amount: 100 });
+    const second = tx({ id: 'second', type: 'EXPENSE', category: 'Chi hộ', date: '2026-10-02', amount: 100 });
+    const receipt = tx({ id: 'receipt', type: 'INCOME', category: 'Thu nợ/Hoàn ứng', date: '2026-11-01', amount: 100 });
+    const context = buildFinanceContext([first, second, receipt], goals);
+    expect(buildSalaryPicture({ transactions: [receipt], context })).toMatchObject({
+      commission: 0, matched: 0, unmatchedReimbursement: 100,
+    });
+    const linked = buildFinanceContext([first, second, receipt], goals, [{ receiptKey: 'receipt', expenseKey: 'second' }]);
+    expect(buildSalaryPicture({ transactions: [receipt], context: linked })).toMatchObject({
+      commission: 0, matched: 100, unmatchedReimbursement: 0,
+    });
+    expect(buildSalaryPicture({ transactions: [second], context: linked }).unreimbursed).toBe(100);
   });
 
   it('counts a transfer back into the fund as the repayment', () => {

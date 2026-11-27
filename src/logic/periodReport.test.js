@@ -80,4 +80,22 @@ describe('buildPeriodReport', () => {
     expect(report.expense).toBe(0);
     expect(report.savingsRate).toBe(0);
   });
+
+  it('uses the same historical funding and repayment filters for totals, charts and details', () => {
+    const goal = { id: 'e', name: 'Quỹ khẩn cấp', wallet: 'A' };
+    const outgoing = { id: 'out', type: 'EXPENSE', category: 'Chuyển khoản đi', date: '2026-10-01', amount: 100, wallet: 'A', transferId: 't', goalId: 'e', goalDelta: -100 };
+    const incoming = { id: 'in', type: 'INCOME', category: 'Chuyển khoản đến', date: '2026-10-01', amount: 100, wallet: 'B', transferId: 't' };
+    const spend = { id: 'spend', type: 'EXPENSE', category: 'Mua sắm', date: '2026-11-20', amount: 150, wallet: 'B' };
+    const history = [{ period: '2026-10', transactions: [outgoing, incoming] }, { period: '2026-11', transactions: [spend] }];
+    const repayments = [
+      { kind: 'borrow', payDate: '2026-11-01', amount: 20, sourceWallet: 'B' },
+      { kind: 'borrow', payDate: '2026-11-21', amount: 20, sourceWallet: 'A' },
+    ];
+    const report = buildPeriodReport({
+      transactions: [spend], history, goals: [goal], repayments, wallet: 'B', from: '2026-11-15', to: '2026-11-30',
+    });
+    expect(report).toMatchObject({ expense: 50, surplus: -50, topExpenses: [{ id: 'spend', amount: 50 }] });
+    expect(report.monthly[0]).toMatchObject({ expense: 50, surplus: -50 });
+    expect(report.drilldown.wallet.B[0].amount).toBe(50);
+  });
 });

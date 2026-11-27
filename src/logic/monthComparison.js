@@ -76,19 +76,23 @@ export function buildMonthComparison({
   ready = false,
   goals = [],
   repayments = [],
+  outstandingBorrow,
+  context,
 }) {
   const previous = previousPeriod(selectedYear, selectedMonth);
   const currentPicture = buildSalaryPicture({
     transactions: currentTransactions,
     goals,
     repaid: repaymentTotal(repayments, { year: selectedYear, month: selectedMonth }),
+    context,
   });
   const previousPicture = buildSalaryPicture({
     transactions: previousTransactions,
     goals,
     repaid: repaymentTotal(repayments, { year: previous.year, month: previous.month }),
+    context,
   });
-  currentPicture.outstandingBorrow = unpaidFundOffers({
+  currentPicture.outstandingBorrow = outstandingBorrow ?? (unpaidFundOffers({
     transactions: previousTransactions,
     goals,
     repayments,
@@ -100,7 +104,7 @@ export function buildMonthComparison({
     goals,
     year: selectedYear,
     month: selectedMonth,
-  });
+  }));
   const income = currentPicture.income;
   const expense = currentPicture.expense;
   const previousIncome = previousPicture.income;

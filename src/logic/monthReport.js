@@ -227,12 +227,14 @@ export function buildMonthReport({
   samePeriodReady = false,
   goals = [],
   repayments = [],
+  context,
 }) {
   const previous = previousPeriod(selectedYear, selectedMonth);
   const asPicture = (list, year, month) => buildSalaryPicture({
     transactions: list,
     goals,
     repaid: repaymentTotal(repayments, { year, month }),
+    context,
   });
   const current = asPicture(currentTransactions, selectedYear, selectedMonth);
   const previousSummary = asPicture(previousTransactions, previous.year, previous.month);

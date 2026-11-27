@@ -68,6 +68,8 @@ export const deriveFinanceLogic = ({
   goals,
   budgets,
   fundRepayments = [],
+  outstandingBorrow,
+  context,
 }) => {
   const getCategoryColor = (catName) => {
     if (!catName || typeof catName !== 'string') return '#A3AED0';
@@ -103,12 +105,13 @@ export const deriveFinanceLogic = ({
     transactions: monthData,
     goals,
     repaid: repaymentTotal(fundRepayments, { year: selectedYear, month: selectedMonth }),
+    context,
   });
   const previous = previousPeriod(selectedYear, selectedMonth);
   const previousTransactions = selectedMonth === 0
     ? boundaryTransactions
     : filterByYearMonth(annualTransactions, previous.year, previous.month);
-  salaryPicture.outstandingBorrow = unpaidFundOffers({
+  salaryPicture.outstandingBorrow = outstandingBorrow ?? (unpaidFundOffers({
     transactions: previousTransactions,
     goals,
     repayments: fundRepayments,
@@ -120,7 +123,7 @@ export const deriveFinanceLogic = ({
     goals,
     year: selectedYear,
     month: selectedMonth,
-  });
+  }));
   const income = salaryPicture.income;
   const expense = salaryPicture.expense;
 
@@ -249,6 +252,7 @@ export const deriveFinanceLogic = ({
         transactions: mTrans,
         goals,
         repaid: repaymentTotal(fundRepayments, { year: selectedYear, month: i }),
+        context,
       });
       return { month: i, income: picture.income, expense: picture.expense, surplus: picture.surplus };
   });
@@ -270,6 +274,7 @@ export const deriveFinanceLogic = ({
   const scopePicture = buildSalaryPicture({
     transactions: annualScopeData,
     goals,
+    context,
     repaid: repaymentTotal(
       fundRepayments,
       annualSelectedMonth === 'ALL'

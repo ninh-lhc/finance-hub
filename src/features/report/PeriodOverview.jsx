@@ -399,6 +399,9 @@ export default function PeriodOverview({
   afterStats = null,
   goals = [],
   fundRepayments = [],
+  history,
+  reimbursementLinks,
+  onMatchReimbursement,
 }) {
   const [filter, setFilter] = useState({
     preset: 'year',
@@ -429,6 +432,8 @@ export default function PeriodOverview({
     wallet: filter.wallet,
     goals,
     repayments: fundRepayments,
+    history,
+    reimbursementLinks,
   });
 
   const fieldClass = 'h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-emerald-500';
@@ -476,7 +481,7 @@ export default function PeriodOverview({
             <StatCard label="Chi trung bình / tháng" value={utils.formatVND(period.averageMonthlyExpense)} detail={`${utils.formatDisplayDate(period.from)} – ${utils.formatDisplayDate(period.to)} (${period.dayCount} ngày)`} toneClass="tone-average" />
           </div>
           <SalaryNotes picture={period.picture} />
-          <FlowDetails picture={period.picture} flow={period.flow} onOpen={handleEditTransaction} />
+          <FlowDetails picture={period.picture} flow={period.flow} onOpen={handleEditTransaction} onMatchReimbursement={onMatchReimbursement} />
 
           {afterStats}
 

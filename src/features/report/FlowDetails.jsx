@@ -25,13 +25,13 @@ function rowDetail(item) {
   return [utils.formatDisplayDate(item.date), item.wallet, item.note].filter(Boolean).join(' · ');
 }
 
-export default function FlowDetails({ picture, flow, onOpen }) {
+export default function FlowDetails({ picture, flow, onOpen, onMatchReimbursement }) {
   if (!picture || !flow) return null;
   const hasHelped = picture.helped > 0 || picture.reimbursement > 0;
-  const hasFund = picture.fundBorrow > 0 || picture.repaid > 0 || flow.transfers.length > 0 || flow.spends.length > 0;
+  const hasFund = picture.outstandingBorrow > 0 || picture.fundBorrow > 0 || picture.repaid > 0 || flow.transfers.length > 0 || flow.spends.length > 0;
   if (!hasHelped && !hasFund) return null;
 
-  const owed = Math.max(0, picture.fundBorrow - picture.repaid);
+  const owed = picture.outstandingBorrow ?? Math.max(0, picture.fundBorrow - picture.repaid);
   const settled = owed === 0 && picture.repaid > 0;
 
   return (
@@ -59,15 +59,34 @@ export default function FlowDetails({ picture, flow, onOpen }) {
               />
             ))}
             {flow.reimbursements.map((item) => (
-              <FlowRow
-                key={item.id || `${item.date}-hoan-${item.amount}-${item.note}`}
-                item={item}
-                title="Thu nợ/Hoàn ứng"
-                detail={rowDetail(item)}
-                amount={`+${utils.formatVND(item.amount)}`}
-                tone="text-[#157A45]"
-                onOpen={onOpen}
-              />
+              <div key={item.id || `${item.date}-hoan-${item.amount}-${item.note}`}>
+                <FlowRow
+                  item={item}
+                  title={item.unmatched ? 'Hoàn ứng · Chưa đối chiếu' : 'Thu nợ/Hoàn ứng'}
+                  detail={rowDetail(item)}
+                  amount={`+${utils.formatVND(item.amount)}`}
+                  tone="text-[#157A45]"
+                  onOpen={onOpen}
+                />
+                {onMatchReimbursement && item.id && item.candidates?.some((expense) => expense.id) && (
+                  <select
+                    aria-label="Chọn giao dịch chi hộ để đối chiếu"
+                    value=""
+                    className="mb-2 w-full rounded-lg border border-slate-200 p-2 text-sm"
+                    onChange={({ target }) => {
+                      const expense = item.candidates.find(({ id }) => id === target.value);
+                      if (expense) onMatchReimbursement(item.transaction, expense);
+                    }}
+                  >
+                    <option value="">Chọn khoản chi hộ đã được hoàn</option>
+                    {item.candidates.filter((expense) => expense.id).map((expense) => (
+                      <option key={expense.id} value={expense.id}>
+                        {utils.formatDisplayDate(expense.date)} · {utils.formatVND(expense.amount)} · {expense.note || expense.wallet}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
             ))}
           </div>
         )}

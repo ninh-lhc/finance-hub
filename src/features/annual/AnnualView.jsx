@@ -25,6 +25,7 @@ export default function AnnualView(props) {
     previousYearReady,
     goals = [],
     fundRepayments = [],
+    context,
   } = props;
 
   const peak = logic.yearSummary.reduce((best, month, index) => (
@@ -37,6 +38,7 @@ export default function AnnualView(props) {
       ? previousYearTransactions
       : filterByYearMonth(previousYearTransactions, selectedYear - 1, compareMonth),
     goals,
+    context,
     repaid: repaymentTotal(
       fundRepayments,
       compareMonth == null

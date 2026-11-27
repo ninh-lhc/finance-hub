@@ -103,6 +103,7 @@ export async function saveTransactionToFirestore({
         })
       : getTransactionBalanceImpact(payload);
 
+  let savedId = editingTransactionId;
   if (editingTransactionId) {
     const [oldY, oldM] = (originalTransaction?.date || '').split('-');
     if (originalTransaction && `${oldY}_${oldM}` !== `${y}_${m}`) {
@@ -114,6 +115,7 @@ export async function saveTransactionToFirestore({
   } else {
     payload.createdAt = new Date().toISOString();
     const newTxRef = doc(getCollectionRef(actualCol));
+    savedId = newTxRef.id;
     batch.set(newTxRef, payload);
   }
 
@@ -126,6 +128,7 @@ export async function saveTransactionToFirestore({
     goals,
   );
   await batch.commit();
+  return savedId;
 }
 
 export async function deleteTransactionFromFirestore({
@@ -147,6 +150,12 @@ export async function deleteTransactionFromFirestore({
       impacts = combineBalanceImpacts(impacts, getTransactionDeleteBalanceImpact(docSnap.data()));
       batch.delete(docSnap.ref);
     });
+    if (transaction.fundRepaymentId) {
+      batch.delete(getDocRef('fundRepayments', transaction.fundRepaymentId));
+      batch.set(getDocRef('fundRepayments', 'borrow_state'), {
+        latestPayment: doc(getCollectionRef('fundRepayments')).id,
+      });
+    }
 
     applyWalletBalanceIncrements(batch, settingsRef, impacts);
     applyGoalDeltas(batch, getDocRef, snap.docs.map((docSnap) => readGoalLink(docSnap.data())), [], goals);
