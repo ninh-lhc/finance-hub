@@ -23,6 +23,12 @@ export function readGoalLink(transaction) {
   };
 }
 
+export function readGoalBalanceLink(transaction, goal) {
+  return (transaction?.goalBalanceRevision || '') === (goal?.balanceRevision || '')
+    ? readGoalLink(transaction)
+    : { goalId: '', goalDelta: 0 };
+}
+
 export function goalAmountWasEdited(previousAmount, nextAmount) {
   return Number(previousAmount || 0) !== Number(nextAmount || 0);
 }

@@ -1,4 +1,4 @@
-import { doc, writeBatch, increment, query, where, getDocs } from 'firebase/firestore';
+import { doc, runTransaction, increment, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config.js';
 import {
   combineBalanceImpacts,
@@ -7,7 +7,7 @@ import {
   getTransactionUpdateBalanceImpact,
   getTransferBalanceImpact,
 } from '../../logic/transactionBalance.js';
-import { netGoalDeltas, readGoalLink } from '../../logic/goalMovement.js';
+import { netGoalDeltas, readGoalBalanceLink } from '../../logic/goalMovement.js';
 
 function applyWalletBalanceIncrements(batch, settingsRef, impacts) {
   const wbUpdates = {};
@@ -26,10 +26,28 @@ function withoutGoalFormFields(payload) {
   return stored;
 }
 
-function applyGoalDeltas(batch, getDocRef, previousLinks, nextLinks, goals) {
-  const known = new Set((goals || []).map((goal) => goal.id));
-  for (const { goalId, delta } of netGoalDeltas(previousLinks, nextLinks)) {
-    if (!known.has(goalId)) continue;
+async function readLinkedGoals(transaction, getDocRef, rows) {
+  const ids = [...new Set(rows.map((row) => row.goalId).filter(Boolean))];
+  const snapshots = await Promise.all(ids.map((id) => transaction.get(getDocRef('goals', id))));
+  return new Map(ids.flatMap((id, index) => snapshots[index].exists() ? [[id, snapshots[index].data()]] : []));
+}
+
+function stampGoalRevision(row, goals) {
+  return { ...row, goalBalanceRevision: goals.get(row.goalId)?.balanceRevision || '' };
+}
+
+function applyGoalDeltas(batch, getDocRef, previousRows, nextRows, goals) {
+  const previous = previousRows.map((row) => readGoalBalanceLink(row, goals.get(row.goalId)));
+  for (const row of nextRows) {
+    if (row.goalId && !goals.has(row.goalId)) throw new Error('Linked goal no longer exists');
+  }
+  const next = nextRows.map((row) => readGoalBalanceLink(row, goals.get(row.goalId)));
+  for (const { goalId, delta } of netGoalDeltas(previous, next)) {
+    if (!goals.has(goalId)) continue;
+    if (nextRows.some((row) => row.goalId === goalId && row.goalDelta < 0)
+      && Number(goals.get(goalId).amount || 0) + delta < 0) {
+      throw new Error('Insufficient goal balance');
+    }
     batch.update(getDocRef('goals', goalId), { amount: increment(delta) });
   }
 }
@@ -46,89 +64,82 @@ export async function saveTransactionToFirestore({
   transferNote,
   transferGoalOut,
   transferGoalIn,
-  goals,
 }) {
   const [y, m] = payload.date.split('-');
   const actualCol = `transactions_${y}_${m}`;
   const settingsRef = getDocRef('settings', 'general');
-  const batch = writeBatch(db);
-
   if (isTransferCreate) {
-    const transferId = Date.now().toString();
     const outLink = transferGoalOut || { goalId: '', goalDelta: 0 };
     const inLink = transferGoalIn || { goalId: '', goalDelta: 0 };
     const stored = withoutGoalFormFields(payload);
 
     const txOutRef = doc(getCollectionRef(actualCol));
-    batch.set(txOutRef, {
+    const txInRef = doc(getCollectionRef(actualCol));
+    const transferId = txOutRef.id;
+    const createdAt = new Date().toISOString();
+    const outgoing = {
       ...stored,
       type: 'EXPENSE',
       category: 'Chuyển khoản đi',
       note: `Chuyển tới ${transferToWallet}: ${transferNote || ''}`,
-      createdAt: new Date().toISOString(),
+      createdAt,
       transferId,
       goalId: outLink.goalId,
       goalDelta: outLink.goalDelta,
-    });
+    };
 
-    const txInRef = doc(getCollectionRef(actualCol));
-    batch.set(txInRef, {
+    const incoming = {
       ...stored,
       type: 'INCOME',
       wallet: transferToWallet,
       category: 'Chuyển khoản đến',
       note: `Nhận từ ${transferFromWallet}: ${transferNote || ''}`,
-      createdAt: new Date().toISOString(),
+      createdAt,
       transferId,
       goalId: inLink.goalId,
       goalDelta: inLink.goalDelta,
-    });
+    };
 
     const impacts = getTransferBalanceImpact({
       fromWallet: transferFromWallet,
       toWallet: transferToWallet,
       amount: payload.amount,
     });
-    applyWalletBalanceIncrements(batch, settingsRef, impacts);
-    applyGoalDeltas(batch, getDocRef, [], [outLink, inLink], goals);
-    await batch.commit();
+    await runTransaction(db, async (transaction) => {
+      const goals = await readLinkedGoals(transaction, getDocRef, [outgoing, incoming]);
+      transaction.set(txOutRef, stampGoalRevision(outgoing, goals));
+      transaction.set(txInRef, stampGoalRevision(incoming, goals));
+      applyWalletBalanceIncrements(transaction, settingsRef, impacts);
+      applyGoalDeltas(transaction, getDocRef, [], [stampGoalRevision(outgoing, goals), stampGoalRevision(incoming, goals)], goals);
+    });
     return;
   }
 
-  const impacts =
-    editingTransactionId && originalTransaction
-      ? getTransactionUpdateBalanceImpact({
-          previousTransaction: originalTransaction,
-          nextTransaction: payload,
-        })
-      : getTransactionBalanceImpact(payload);
-
-  let savedId = editingTransactionId;
-  if (editingTransactionId) {
-    const [oldY, oldM] = (originalTransaction?.date || '').split('-');
-    if (originalTransaction && `${oldY}_${oldM}` !== `${y}_${m}`) {
-      batch.delete(getDocRef(`transactions_${oldY}_${oldM}`, editingTransactionId));
-      batch.set(getDocRef(actualCol, editingTransactionId), payload);
-    } else {
-      batch.update(getDocRef(actualCol, editingTransactionId), payload);
+  const destinationRef = editingTransactionId
+    ? getDocRef(actualCol, editingTransactionId)
+    : doc(getCollectionRef(actualCol));
+  const previousCollection = originalTransaction?.date
+    ? `transactions_${originalTransaction.date.slice(0, 7).replace('-', '_')}`
+    : actualCol;
+  const originalRef = editingTransactionId ? getDocRef(previousCollection, editingTransactionId) : null;
+  const createdAt = new Date().toISOString();
+  await runTransaction(db, async (transaction) => {
+    const previous = originalRef ? (await transaction.get(originalRef)).data() : null;
+    if (originalRef && !previous) throw new Error('Transaction was moved or deleted');
+    const goals = await readLinkedGoals(transaction, getDocRef, previous ? [previous, payload] : [payload]);
+    const next = stampGoalRevision({ ...previous, ...payload, createdAt: previous?.createdAt || createdAt }, goals);
+    if (next.goalId && previous?.goalId === next.goalId) {
+      next.goalBalanceRevision = previous.goalBalanceRevision || '';
     }
-  } else {
-    payload.createdAt = new Date().toISOString();
-    const newTxRef = doc(getCollectionRef(actualCol));
-    savedId = newTxRef.id;
-    batch.set(newTxRef, payload);
-  }
-
-  applyWalletBalanceIncrements(batch, settingsRef, impacts);
-  applyGoalDeltas(
-    batch,
-    getDocRef,
-    editingTransactionId ? [readGoalLink(originalTransaction)] : [],
-    [readGoalLink(payload)],
-    goals,
-  );
-  await batch.commit();
-  return savedId;
+    if (originalRef && previousCollection !== actualCol) transaction.delete(originalRef);
+    transaction.set(destinationRef, next);
+    const impacts = previous
+      ? getTransactionUpdateBalanceImpact({ previousTransaction: previous, nextTransaction: next })
+      : getTransactionBalanceImpact(next);
+    applyWalletBalanceIncrements(transaction, settingsRef, impacts);
+    applyGoalDeltas(transaction, getDocRef, previous ? [previous] : [], [next], goals);
+  });
+  return destinationRef.id;
 }
 
 export async function deleteTransactionFromFirestore({
@@ -137,36 +148,26 @@ export async function deleteTransactionFromFirestore({
   collectionName,
   documentId,
   transaction,
-  goals,
 }) {
-  const batch = writeBatch(db);
   const settingsRef = getDocRef('settings', 'general');
-
-  if (transaction.transferId) {
-    const q = query(getCollectionRef(collectionName), where('transferId', '==', transaction.transferId));
-    const snap = await getDocs(q);
-    let impacts = combineBalanceImpacts();
-    snap.docs.forEach((docSnap) => {
-      impacts = combineBalanceImpacts(impacts, getTransactionDeleteBalanceImpact(docSnap.data()));
-      batch.delete(docSnap.ref);
-    });
-    if (transaction.fundRepaymentId) {
-      batch.delete(getDocRef('fundRepayments', transaction.fundRepaymentId));
+  const refs = transaction.transferId
+    ? (await getDocs(query(getCollectionRef(collectionName), where('transferId', '==', transaction.transferId)))).docs.map((item) => item.ref)
+    : [getDocRef(collectionName, documentId)];
+  await runTransaction(db, async (batch) => {
+    const snapshots = (await Promise.all(refs.map((ref) => batch.get(ref)))).filter((snapshot) => snapshot.exists());
+    const rows = snapshots.map((snapshot) => snapshot.data());
+    const goals = await readLinkedGoals(batch, getDocRef, rows);
+    for (const snapshot of snapshots) batch.delete(snapshot.ref);
+    const repaymentId = rows.find((row) => row.fundRepaymentId)?.fundRepaymentId;
+    if (repaymentId) {
+      batch.delete(getDocRef('fundRepayments', repaymentId));
       batch.set(getDocRef('fundRepayments', 'borrow_state'), {
         latestPayment: doc(getCollectionRef('fundRepayments')).id,
       });
     }
 
-    applyWalletBalanceIncrements(batch, settingsRef, impacts);
-    applyGoalDeltas(batch, getDocRef, snap.docs.map((docSnap) => readGoalLink(docSnap.data())), [], goals);
-    await batch.commit();
-    return { kind: 'transfer_pair' };
-  }
-
-  const impacts = getTransactionDeleteBalanceImpact(transaction);
-  applyWalletBalanceIncrements(batch, settingsRef, impacts);
-  applyGoalDeltas(batch, getDocRef, [readGoalLink(transaction)], [], goals);
-  batch.delete(getDocRef(collectionName, documentId));
-  await batch.commit();
-  return { kind: 'single' };
+    applyWalletBalanceIncrements(batch, settingsRef, combineBalanceImpacts(...rows.map(getTransactionDeleteBalanceImpact)));
+    applyGoalDeltas(batch, getDocRef, rows, [], goals);
+  });
+  return { kind: transaction.transferId ? 'transfer_pair' : 'single' };
 }

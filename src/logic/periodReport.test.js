@@ -122,4 +122,18 @@ describe('buildPeriodReport', () => {
     expect(buildPeriodReport({ ...options, to: '2026-10-02' }).picture.unreimbursed).toBe(100);
     expect(buildPeriodReport({ ...options, to: '2026-10-03' }).picture.unreimbursed).toBe(0);
   });
+
+  it('follows borrowed cash through a second wallet and shows its balance across report boundaries', () => {
+    const goals = [{ id: 'e', name: 'Quỹ khẩn cấp', wallet: 'A' }];
+    const rows = [
+      { id: '1', type: 'EXPENSE', category: 'Chuyển khoản đi', date: '2026-10-30', amount: 100, wallet: 'A', transferId: 'borrow', goalId: 'e', goalDelta: -100 },
+      { id: '2', type: 'INCOME', category: 'Chuyển khoản đến', date: '2026-10-30', amount: 100, wallet: 'B', transferId: 'borrow' },
+      { id: '3', type: 'EXPENSE', category: 'Chuyển khoản đi', date: '2026-11-01', amount: 100, wallet: 'B', transferId: 'relay' },
+      { id: '4', type: 'INCOME', category: 'Chuyển khoản đến', date: '2026-11-01', amount: 100, wallet: 'C', transferId: 'relay' },
+      { id: '5', type: 'EXPENSE', category: 'Mua sắm', date: '2026-11-02', amount: 60, wallet: 'C' },
+    ];
+    const options = { transactions: rows, goals, from: '2026-11-01', to: '2026-11-30' };
+    expect(buildPeriodReport({ ...options, wallet: 'C' })).toMatchObject({ expense: 0, flow: { spent: 60, remainder: 40 } });
+    expect(buildPeriodReport({ ...options, wallet: 'B' }).flow.remainder).toBe(0);
+  });
 });

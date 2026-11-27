@@ -247,6 +247,21 @@ describe('serializeFinanceCsv', () => {
 });
 
 describe('round-trip', () => {
+  it('preserves fund links, transfer IDs, repayment records and the charged wallet', () => {
+    const transaction = {
+      id: 'source', type: 'EXPENSE', date: '2026-11-01', amount: 100,
+      category: 'Chuyển khoản đi', wallet: 'A', linkedWallet: 'B', transferId: 'pair',
+      goalId: 'fund', goalDelta: -100, goalBalanceRevision: 'rev',
+    };
+    const goals = [{ id: 'fund', name: 'Dự phòng', amount: 100, wallet: 'B', isEmergencyFund: true, balanceRevision: 'rev' }];
+    const repayments = [{ id: 'repay', kind: 'borrow', goalId: 'fund', amount: 50, debtYear: 2026, debtMonth: 9, payDate: '2026-11-01' }];
+    const parsed = parseFinanceCsv(serializeFinanceCsv({ transactions: [transaction], goals, repayments }), { wallets: ['Other'] });
+    const { id, ...data } = transaction;
+    expect(parsed.rows[0]).toMatchObject({ id, data });
+    expect(parsed.ledgerGoals[0]).toMatchObject(goals[0]);
+    expect(parsed.ledgerRepayments[0]).toMatchObject(repayments[0]);
+    expect(sumImportImpact(parsed.rows)).toEqual({ B: -100 });
+  });
   it('serialize then parse valid domain data', () => {
     const tx = [
       {

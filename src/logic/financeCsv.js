@@ -204,6 +204,44 @@ export function parseImportAmount(amountStr) {
  * @param {string} csvText
  * @param {{ wallets?: string[]; categories?: { INCOME?: string[]; EXPENSE?: string[] } }} [options]
  */
+const LEDGER_METADATA = 'FinanceHub metadata';
+const validDocumentId = (value) => typeof value === 'string' && value.length > 0
+  && value.length < 500 && !value.includes('/') && !/^\.{1,2}$|^__.*__$/.test(value);
+
+function readLedgerMetadata(value) {
+  if (!value) return {};
+  const metadata = JSON.parse(value);
+  if (!metadata || Array.isArray(metadata) || typeof metadata !== 'object') throw new Error('Invalid ledger metadata');
+  const data = {};
+  for (const key of ['transferId', 'goalId', 'fundRepaymentId', 'goalBalanceRevision']) {
+    if (validDocumentId(metadata[key])) data[key] = metadata[key];
+  }
+  for (const key of ['wallet', 'linkedWallet', 'createdAt']) {
+    if (typeof metadata[key] === 'string') data[key] = metadata[key];
+  }
+  if (data.goalId && Number.isFinite(metadata.goalDelta)) data.goalDelta = metadata.goalDelta;
+  const goals = (Array.isArray(metadata.goals) ? metadata.goals : []).filter((goal) => (
+    validDocumentId(goal?.id) && typeof goal.name === 'string' && Number.isFinite(goal.amount)
+  )).map((goal) => ({
+    id: goal.id, name: goal.name, amount: goal.amount,
+    wallet: typeof goal.wallet === 'string' ? goal.wallet : '',
+    target: Number.isFinite(goal.target) ? goal.target : 0,
+    isEmergencyFund: goal.isEmergencyFund === true,
+    balanceRevision: validDocumentId(goal.balanceRevision) ? goal.balanceRevision : '',
+  }));
+  const repayments = (Array.isArray(metadata.repayments) ? metadata.repayments : []).filter((item) => (
+    validDocumentId(item?.id) && validDocumentId(item.goalId) && ['borrow', 'helped'].includes(item.kind)
+    && Number.isFinite(item.amount) && item.amount > 0 && Number.isInteger(item.debtYear)
+    && Number.isInteger(item.debtMonth) && item.debtMonth >= 0 && item.debtMonth < 12
+    && typeof item.payDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item.payDate)
+  )).map(({ id, goalId, kind, amount, debtYear, debtMonth, payDate, sourceWallet, destinationWallet }) => ({
+    id, goalId, kind, amount, debtYear, debtMonth, payDate,
+    sourceWallet: typeof sourceWallet === 'string' ? sourceWallet : '',
+    destinationWallet: typeof destinationWallet === 'string' ? destinationWallet : '',
+  }));
+  return { id: validDocumentId(metadata.id) ? metadata.id : undefined, data, goals, repayments };
+}
+
 export function parseFinanceCsv(csvText, options = {}) {
   const errors = [];
   const warnings = [];
@@ -227,8 +265,10 @@ export function parseFinanceCsv(csvText, options = {}) {
   }
 
   const header = records[0];
+  const metadataIndex = header.indexOf(LEDGER_METADATA);
+  const goalRecords = new Map();
+  const repaymentRecords = new Map();
   const rows = [];
-  const totalImpact = {};
   const newWalletsSet = new Set(initialWallets);
   const newIncCats = new Set(initialCategories.INCOME ?? []);
   const newExpCats = new Set(initialCategories.EXPENSE ?? []);
@@ -249,6 +289,13 @@ export function parseFinanceCsv(csvText, options = {}) {
     }
 
     let [dateStr, note, typeStr, category, wallet, amountStr] = cols;
+    let metadata = {};
+    try {
+      if (metadataIndex >= 0) metadata = readLedgerMetadata(cols[metadataIndex]);
+    } catch {
+      errors.push({ rowNumber, code: 'CSV_INVALID_METADATA', message: 'Siêu dữ liệu giao dịch không hợp lệ.' });
+      continue;
+    }
     note = unsanitizeSpreadsheetText(note ?? '');
     category = unsanitizeSpreadsheetText(category ?? '') || 'Khác';
     wallet = unsanitizeSpreadsheetText(wallet ?? '').trim();
@@ -273,7 +320,7 @@ export function parseFinanceCsv(csvText, options = {}) {
       errors.push({ rowNumber, code: 'CSV_UNKNOWN_WALLET', message: 'Thiếu nguồn tiền.' });
       continue;
     }
-    if (knownWallets.length > 0 && !knownWallets.includes(wallet)) {
+    if (!metadata.id && knownWallets.length > 0 && !knownWallets.includes(wallet)) {
       errors.push({ rowNumber, code: 'CSV_UNKNOWN_WALLET', message: `Không có ví "${wallet}".` });
       continue;
     }
@@ -289,6 +336,7 @@ export function parseFinanceCsv(csvText, options = {}) {
 
     rows.push({
       col: colName,
+      ...(metadata.id ? { id: metadata.id } : {}),
       data: {
         type,
         category,
@@ -298,17 +346,20 @@ export function parseFinanceCsv(csvText, options = {}) {
         note: note || '',
         createdAt: new Date().toISOString(),
         isSample: false,
+        ...metadata.data,
       },
     });
 
     if (type === 'INCOME') {
-      totalImpact[wallet] = (totalImpact[wallet] || 0) + amount;
       newIncCats.add(category);
     } else {
-      totalImpact[wallet] = (totalImpact[wallet] || 0) - amount;
       newExpCats.add(category);
     }
     newWalletsSet.add(wallet);
+    if (metadata.data?.wallet) newWalletsSet.add(metadata.data.wallet);
+    if (metadata.data?.linkedWallet) newWalletsSet.add(metadata.data.linkedWallet);
+    for (const goal of metadata.goals || []) goalRecords.set(goal.id, goal);
+    for (const item of metadata.repayments || []) repaymentRecords.set(item.id, item);
     validCount += 1;
     lastImportedDate = date;
   }
@@ -326,12 +377,14 @@ export function parseFinanceCsv(csvText, options = {}) {
     rows,
     validCount,
     lastImportedDate,
-    totalImpact,
+    totalImpact: sumImportImpact(rows),
     newWallets: Array.from(newWalletsSet),
     newIncCats: Array.from(newIncCats),
     newExpCats: Array.from(newExpCats),
     errors,
     warnings,
+    ledgerGoals: [...goalRecords.values()],
+    ledgerRepayments: [...repaymentRecords.values()],
   };
 }
 
@@ -358,16 +411,21 @@ export function transactionImportKey(transaction) {
  * @returns {{ rows: typeof rows; skipped: number }}
  */
 export function omitImportedDuplicates(rows, existingTransactions = []) {
-  const seen = new Set((existingTransactions || []).map((transaction) => transactionImportKey(transaction)));
+  const existing = existingTransactions || [];
+  const seen = new Set(existing.map(transactionImportKey));
+  const ids = new Set(existing.map((transaction) => transaction.id).filter(Boolean));
+  const seenLegacy = new Set(existing.filter((transaction) => !transaction.id).map(transactionImportKey));
   const kept = [];
   let skipped = 0;
   (rows || []).forEach((row) => {
     const key = transactionImportKey(row?.data);
-    if (seen.has(key)) {
+    if (row.id ? ids.has(row.id) || seenLegacy.has(key) : seen.has(key)) {
       skipped += 1;
       return;
     }
     seen.add(key);
+    if (row.id) ids.add(row.id);
+    else seenLegacy.add(key);
     kept.push(row);
   });
   return { rows: kept, skipped };
@@ -380,7 +438,7 @@ export function omitImportedDuplicates(rows, existingTransactions = []) {
 export function sumImportImpact(rows) {
   const totalImpact = {};
   (rows || []).forEach((row) => {
-    const wallet = row?.data?.wallet;
+    const wallet = row?.data?.type === 'EXPENSE' ? row.data.linkedWallet || row.data.wallet : row?.data?.wallet;
     const amount = Number(row?.data?.amount || 0);
     if (!wallet || !amount) return;
     const delta = row.data.type === 'INCOME' ? amount : -amount;
@@ -396,14 +454,18 @@ export function sumImportImpact(rows) {
 export function serializeFinanceCsv(input) {
   const {
     transactions,
+    goals = [],
+    repayments = [],
     includeBom = true,
     formatDisplayDate = utils.formatDisplayDate,
   } = input ?? {};
 
   const list = Array.isArray(transactions) ? [...transactions] : [];
   list.sort((a, b) => new Date(b.date) - new Date(a.date));
+  const hasMetadata = list.some((row) => row.id || row.transferId || row.goalId || row.fundRepaymentId)
+    || goals.length > 0 || repayments.length > 0;
 
-  const dataRows = list.map((t) => {
+  const dataRows = list.map((t, index) => {
     const note = sanitizeSpreadsheetText(t.note ?? '');
     const category = sanitizeSpreadsheetText(t.category ?? '');
     const wallet = sanitizeSpreadsheetText(t.linkedWallet || t.wallet || '');
@@ -415,10 +477,18 @@ export function serializeFinanceCsv(input) {
       escapeCsvField(category),
       escapeCsvField(wallet),
       String(t.amount ?? ''),
+      ...(hasMetadata ? [escapeCsvField(JSON.stringify({
+        id: t.id, wallet: t.wallet, linkedWallet: t.linkedWallet, createdAt: t.createdAt,
+        transferId: t.transferId, goalId: t.goalId, goalDelta: t.goalDelta,
+        goalBalanceRevision: t.goalBalanceRevision, fundRepaymentId: t.fundRepaymentId,
+        goals: index === 0 ? goals : undefined,
+        repayments: index === 0 ? repayments : undefined,
+      }))] : []),
     ];
   });
 
-  const lines = [FINANCE_EXPORT_HEADERS.map(escapeCsvField).join(','), ...dataRows.map((r) => r.join(','))];
+  const headers = hasMetadata ? [...FINANCE_EXPORT_HEADERS, LEDGER_METADATA] : FINANCE_EXPORT_HEADERS;
+  const lines = [headers.map(escapeCsvField).join(','), ...dataRows.map((r) => r.join(','))];
   const body = lines.join('\n');
   return includeBom ? `\uFEFF${body}` : body;
 }

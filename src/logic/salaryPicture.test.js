@@ -206,6 +206,19 @@ describe('buildSalaryPicture', () => {
     expect(buildSalaryPicture({ transactions: [second], context: linked }).unreimbursed).toBe(100);
   });
 
+  it('applies the remainder of a targeted repayment to later open borrowing from the same fund', () => {
+    const borrow = (date) => tx({ type: 'EXPENSE', category: 'Mua sắm', date, goalId: 'emergency', goalDelta: -100, amount: 100 });
+    const history = [
+      { period: '2026-10', transactions: [borrow('2026-10-01')] },
+      { period: '2026-11', transactions: [
+        borrow('2026-11-01'),
+        tx({ type: 'INCOME', category: 'Chuyển khoản đến', date: '2026-11-05', goalId: 'emergency', goalDelta: 100, amount: 100 }),
+      ] },
+    ];
+    const repayments = [{ kind: 'borrow', goalId: 'emergency', debtYear: 2026, debtMonth: 9, amount: 100, payDate: '2026-11-10' }];
+    expect(outstandingFundLoans({ history, goals, repayments, through: '2026-11-30' })).toEqual([]);
+  });
+
   it('keeps an earlier automatic partial match when a later receipt is explicitly linked', () => {
     const spent = tx({ id: 'help', type: 'EXPENSE', category: 'Chi hộ', date: '2026-10-01', amount: 100, note: 'Order 1' });
     const first = tx({ id: 'first', type: 'INCOME', category: 'Thu nợ/Hoàn ứng', date: '2026-10-02', amount: 40, note: 'Order 1' });

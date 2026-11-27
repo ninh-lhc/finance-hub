@@ -141,7 +141,7 @@ export function buildPeriodReport({
   });
   const monthCount = Math.max(months.length, 1);
   const dayCount = inclusiveDayCount(range.from, range.to);
-  const flow = listFlowItems(period, goals, context);
+  const flow = listFlowItems(period, goals, context, { through: range.to, wallet });
   const personalExpenses = period.filter((transaction) => isSalaryExpense(transaction, goals));
   const personalIncome = period.filter((transaction) => isCountedIncome(transaction) && transaction.category !== 'Thu nợ/Hoàn ứng');
   const expenseCategories = shareRows(

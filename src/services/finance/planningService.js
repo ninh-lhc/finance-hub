@@ -1,30 +1,6 @@
-import { addDoc, updateDoc, deleteDoc, getDocs, writeBatch, doc, increment, runTransaction } from 'firebase/firestore';
+import { addDoc, updateDoc, deleteDoc, doc, increment, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase/config.js';
-import { getTransactionMonthCollectionNames } from '../../logic/walletCategoryEntities.js';
-import { goalLinkDetachPatch } from '../../logic/goalMovement.js';
 import { isEmergencyGoal } from '../../logic/salaryPicture.js';
-
-const GOAL_DETACH_BATCH_SIZE = 400;
-
-async function detachGoalLinks({ getCollectionRef, goalId, currentYear }) {
-  const collectionNames = getTransactionMonthCollectionNames(currentYear);
-  const snaps = await Promise.all(collectionNames.map((name) => getDocs(getCollectionRef(name))));
-  const updates = [];
-  snaps.forEach((snap) => {
-    snap.docs.forEach((docSnap) => {
-      const patch = goalLinkDetachPatch(docSnap.data(), goalId);
-      if (patch) updates.push({ ref: docSnap.ref, patch });
-    });
-  });
-  for (let index = 0; index < updates.length; index += GOAL_DETACH_BATCH_SIZE) {
-    const batch = writeBatch(db);
-    updates.slice(index, index + GOAL_DETACH_BATCH_SIZE).forEach(({ ref, patch }) => {
-      batch.update(ref, patch);
-    });
-    await batch.commit();
-  }
-  return updates.length;
-}
 
 export async function saveBudgetToFirestore({
   getCollectionRef,
@@ -44,18 +20,18 @@ export async function saveGoalToFirestore({
   getDocRef,
   payload,
   editingId,
-  detachLinks = false,
+  resetBalance = false,
   previousGoal,
-  currentYear = new Date().getFullYear(),
 }) {
   const goalPayload = isEmergencyGoal(previousGoal) || isEmergencyGoal(payload)
     ? { ...payload, isEmergencyFund: true }
     : payload;
   if (editingId) {
-    await updateDoc(getDocRef('goals', editingId), goalPayload);
-    if (!detachLinks) return { detached: 0 };
-    const detached = await detachGoalLinks({ getCollectionRef, goalId: editingId, currentYear });
-    return { detached };
+    const changes = { ...goalPayload };
+    if (resetBalance) changes.balanceRevision = doc(getCollectionRef('goals')).id;
+    else if (previousGoal?.amount != null) delete changes.amount;
+    await updateDoc(getDocRef('goals', editingId), changes);
+    return;
   }
   await addDoc(getCollectionRef('goals'), {
     ...goalPayload,
@@ -87,9 +63,12 @@ export async function lockFundRepayment({
   const repaymentRef = getDocRef('fundRepayments', `helped_${receiptId}`);
   return runTransaction(db, async (transaction) => {
     if ((await transaction.get(repaymentRef)).exists()) return;
+    const goal = (await transaction.get(getDocRef('goals', goalId))).data();
+    if (!goal) throw new Error('Repayment goal no longer exists');
     writeFundPayment(transaction, {
       getCollectionRef, getDocRef, repaymentRef, goalId, amount, debtYear, debtMonth, payDate,
-      kind, sourceWallet, destinationWallet, createdAt: new Date().toISOString(),
+      kind, sourceWallet, destinationWallet: goal.wallet || destinationWallet, createdAt: new Date().toISOString(),
+      goalBalanceRevision: goal.balanceRevision || '',
     });
   });
 }
@@ -97,6 +76,7 @@ export async function lockFundRepayment({
 function writeFundPayment(transaction, {
   getCollectionRef, getDocRef, repaymentRef, goalId, amount, debtYear, debtMonth,
   payDate, kind, sourceWallet, destinationWallet, createdAt,
+  goalBalanceRevision,
 }) {
   transaction.update(getDocRef('goals', goalId), { amount: increment(amount) });
   transaction.set(repaymentRef, {
@@ -111,14 +91,14 @@ function writeFundPayment(transaction, {
   });
   transaction.set(doc(collectionRef), {
     ...transfer, type: 'INCOME', category: 'Chuyển khoản đến', wallet: destinationWallet,
-    goalId, goalDelta: amount,
+    goalId, goalDelta: amount, goalBalanceRevision,
   });
   transaction.set(getDocRef('settings', 'general'), {
     walletBalances: { [sourceWallet]: increment(-amount), [destinationWallet]: increment(amount) },
   }, { merge: true });
 }
 
-export async function lockMonthlyFundRepayment({ getCollectionRef, getDocRef, plan, payDate, repaymentVersion, sourceWallet, goals }) {
+export async function lockMonthlyFundRepayment({ getCollectionRef, getDocRef, plan, payDate, repaymentVersion, sourceWallet }) {
   const monthlyRef = getDocRef('fundRepayments', `borrow_${payDate.slice(0, 7)}`);
   const stateRef = getDocRef('fundRepayments', 'borrow_state');
   const createdAt = new Date().toISOString();
@@ -129,12 +109,17 @@ export async function lockMonthlyFundRepayment({ getCollectionRef, getDocRef, pl
       throw new Error('Fund repayments changed while confirming this payment');
     }
 
+    const goalIds = [...new Set(plan.map((item) => item.goalId))];
+    const goals = await Promise.all(goalIds.map(async (id) => (await transaction.get(getDocRef('goals', id))).data()));
+    const goalById = new Map(goalIds.map((id, index) => [id, goals[index]]));
     plan.forEach((item, index) => {
       const repaymentRef = index === 0 ? monthlyRef : doc(getCollectionRef('fundRepayments'));
-      const destinationWallet = goals.find((goal) => goal.id === item.goalId)?.wallet || sourceWallet;
+      const goal = goalById.get(item.goalId);
+      if (!goal) throw new Error('Repayment goal no longer exists');
       writeFundPayment(transaction, {
         getCollectionRef, getDocRef, repaymentRef, ...item, payDate, kind: 'borrow',
-        sourceWallet, destinationWallet, createdAt,
+        sourceWallet, destinationWallet: goal.wallet || sourceWallet, createdAt,
+        goalBalanceRevision: goal.balanceRevision || '',
       });
     });
     transaction.set(stateRef, { latestPayment: monthlyRef.id });

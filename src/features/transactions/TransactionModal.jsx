@@ -1,7 +1,7 @@
 import { X } from 'lucide-react';
 import utils from '../../utils/format.js';
 import { locksForWallet } from '../../logic/planningEntities.js';
-import { goalAmountAfterUndo, goalsOnWallet, readGoalLink } from '../../logic/goalMovement.js';
+import { goalAmountAfterUndo, goalsOnWallet, readGoalBalanceLink } from '../../logic/goalMovement.js';
 
 function GoalSelect({ label, emptyLabel, goals, value, onChange, hint, hintTone }) {
   if (!goals.length) return null;
@@ -66,8 +66,12 @@ export default function TransactionModal(props) {
   const expenseGoalId = expenseGoals.some((goal) => goal.id === formData.goalId) ? formData.goalId : '';
   const fromGoalId = sourceGoals.some((goal) => goal.id === formData.fromGoalId) ? formData.fromGoalId : '';
   const toGoalId = destinationGoals.some((goal) => goal.id === formData.toGoalId) ? formData.toGoalId : '';
-  const previousLink = readGoalLink(formData.originalTx);
-  const expenseHint = goalActionHint(expenseGoals, expenseGoalId, formData.amount, 'decrease', previousLink);
+  const previousGoal = expenseGoals.find((goal) => goal.id === formData.originalTx?.goalId);
+  const previousLink = readGoalBalanceLink(formData.originalTx, previousGoal);
+  const historicalLink = expenseGoalId && expenseGoalId === previousGoal?.id && !previousLink.goalId;
+  const expenseHint = historicalLink
+    ? { tone: 'info', text: 'Giao dịch này thuộc lịch sử trước lần chỉnh số dư quỹ.' }
+    : goalActionHint(expenseGoals, expenseGoalId, formData.amount, 'decrease', previousLink);
   const sourceHint = goalActionHint(sourceGoals, fromGoalId, formData.amount, 'decrease', null);
   const destinationHint = goalActionHint(destinationGoals, toGoalId, formData.amount, 'increase', null);
   const goalBlocked = expenseHint?.tone === 'block' || sourceHint?.tone === 'block';

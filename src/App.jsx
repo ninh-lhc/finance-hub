@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { 
-  collection, addDoc, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, writeBatch, increment
+  collection, addDoc, doc, deleteDoc, updateDoc, setDoc, getDoc, getDocs, writeBatch, increment, runTransaction
 } from 'firebase/firestore';
 import { auth, db, baseAppId } from './services/firebase/config.js';
 import useAuthUser from './hooks/useAuthUser.js';
@@ -44,7 +44,7 @@ import {
 } from './logic/planningEntities.js';
 import {
   goalLink,
-  readGoalLink,
+  readGoalBalanceLink,
   selectedGoalId,
   validateGoalLinks,
   goalAmountWasEdited,
@@ -148,7 +148,7 @@ async function offerFundAdjustment({ payload, goals, fundRepayments, reimburseme
       if (/^\d+$/.test(input) && Number.isSafeInteger(amount) && amount >= 1 && amount <= maximum) {
         await lockMonthlyFundRepayment({
           getCollectionRef, getDocRef, repaymentVersion,
-          plan: repaymentPlan(offers, amount), payDate: date, sourceWallet: payload.wallet, goals,
+          plan: repaymentPlan(offers, amount), payDate: date, sourceWallet: payload.wallet,
         });
         return;
       }
@@ -607,12 +607,15 @@ export default function App() {
           if (formData.type === 'EXPENSE') {
               const chargedWallet = (useLinkedWallet && formData.linkedWallet) ? formData.linkedWallet : formData.wallet;
               const link = goalLink(selectedGoalId(goals, chargedWallet, formData.goalId), formData.amount, 'decrease');
-              const previousLinks = editingTxId ? [readGoalLink(formData.originalTx)] : [];
+              const previousGoal = goals.find((goal) => goal.id === formData.originalTx?.goalId);
+              const previousLinks = editingTxId ? [readGoalBalanceLink(formData.originalTx, previousGoal)] : [];
+              const historicalLink = editingTxId && link.goalId && link.goalId === formData.originalTx?.goalId
+                && !previousLinks[0].goalId;
               const check = validateGoalLinks({
                 goals,
                 walletByGoalId: link.goalId ? { [link.goalId]: chargedWallet } : {},
                 previousLinks,
-                nextLinks: [link],
+                nextLinks: historicalLink ? [] : [link],
               });
               if (!check.ok) { showToast(goalSaveError(check), 'warning'); return; }
           }
@@ -670,7 +673,6 @@ export default function App() {
                 transferNote: formData.note,
                 transferGoalOut,
                 transferGoalIn,
-                goals,
               });
               handleCloseModal();
               showToast('Đã luân chuyển tiền thành công!', 'success');
@@ -685,7 +687,6 @@ export default function App() {
             editingTransactionId: editingTxId,
             originalTransaction: originalTx,
             isTransferCreate: false,
-            goals,
           });
       } else {
          if (editingTxId) await updateDoc(getDocRef(colName, editingTxId), payload);
@@ -749,7 +750,6 @@ export default function App() {
                collectionName: actualCol,
                documentId: id,
                transaction: { ...txObj, ...snapCheck.data() },
-               goals,
              });
              if (deleteResult.kind === 'transfer_pair') {
                  showToast('Đã xóa toàn bộ phiếu luân chuyển!', 'success');
@@ -829,7 +829,14 @@ export default function App() {
     const sourceData = isAnnualExport ? annualTransactions : transactions;
     if (sourceData.length === 0) { showToast('Không có dữ liệu để xuất!', 'warning'); return; }
 
-    const csvContent = serializeFinanceCsv({ transactions: sourceData });
+    const exportedMonths = new Set(sourceData.map((row) => row.date.slice(0, 7)));
+    const repayments = fundRepayments.filter((item) => item.payDate && exportedMonths.has(item.payDate.slice(0, 7)));
+    const referencedGoals = new Set([...sourceData, ...repayments].map((item) => item.goalId).filter(Boolean));
+    const csvContent = serializeFinanceCsv({
+      transactions: sourceData,
+      goals: goals.filter((goal) => referencedGoals.has(goal.id)),
+      repayments,
+    });
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a'); link.href = url; 
@@ -868,38 +875,57 @@ export default function App() {
             const existingSnaps = await Promise.all(
               collectionNames.map((name) => getDocs(getCollectionRef(name))),
             );
-            const existingTransactions = existingSnaps.flatMap((snap) => snap.docs.map((docSnap) => docSnap.data()));
+            const existingTransactions = existingSnaps.flatMap((snap) => snap.docs.map((docSnap) => ({ ...docSnap.data(), id: docSnap.id })));
             const deduped = omitImportedDuplicates(parsed.rows, existingTransactions);
-            if (deduped.rows.length === 0) {
-              showToast('Các dòng này đã có trong sổ.', 'warning');
-              return;
-            }
 
             const payloads = deduped.rows;
             const { newWallets, newIncCats, newExpCats } = parsed;
-            const validCount = payloads.length;
+            let validCount = 0;
             const lastImportedDate = payloads.reduce((latest, row) => {
               const date = row.data.date;
               return !latest || date > latest ? date : latest;
             }, null);
 
-            const chunkSize = 450;
+            const chunkSize = 200;
             for (let i = 0; i < payloads.length; i += chunkSize) {
                 const chunk = payloads.slice(i, i + chunkSize);
-                const batch = writeBatch(db);
-                chunk.forEach(p => {
-                    const docRef = doc(getCollectionRef(p.col));
-                    batch.set(docRef, p.data);
-                });
-                const walletBalances = Object.fromEntries(Object.entries(sumImportImpact(chunk))
+                const refs = chunk.map(({ col, id }) => id ? getDocRef(col, id) : doc(getCollectionRef(col)));
+                validCount += await runTransaction(db, async (batch) => {
+                  const existing = await Promise.all(chunk.map(({ id }, index) => id ? batch.get(refs[index]) : null));
+                  const inserted = chunk.filter((row, index) => {
+                    if (existing[index]?.exists()) return false;
+                    batch.set(refs[index], row.data);
+                    return true;
+                  });
+                  if (!inserted.length) return 0;
+                  const walletBalances = Object.fromEntries(Object.entries(sumImportImpact(inserted))
                   .filter(([, delta]) => delta !== 0)
                   .map(([wallet, delta]) => [wallet, increment(delta)]));
-                batch.set(getDocRef('settings', 'general'), {
+                  batch.set(getDocRef('settings', 'general'), {
                     wallets: newWallets,
                     categories: { INCOME: newIncCats, EXPENSE: newExpCats },
                     ...(Object.keys(walletBalances).length ? { walletBalances } : {}),
-                }, { merge: true });
-                await batch.commit();
+                  }, { merge: true });
+                  return inserted.length;
+                });
+            }
+
+            const metadata = [
+              ...parsed.ledgerGoals.map(({ id, ...data }) => ({ ref: getDocRef('goals', id), data })),
+              ...parsed.ledgerRepayments.map(({ id, ...data }) => ({ ref: getDocRef('fundRepayments', id), data })),
+            ];
+            for (let i = 0; i < metadata.length; i += chunkSize) {
+              const chunk = metadata.slice(i, i + chunkSize);
+              await runTransaction(db, async (batch) => {
+                const existing = await Promise.all(chunk.map(({ ref }) => batch.get(ref)));
+                chunk.forEach(({ ref, data }, index) => {
+                  if (!existing[index].exists()) batch.set(ref, data);
+                });
+              });
+            }
+            if (!validCount && !metadata.length) {
+              showToast('Các dòng này đã có trong sổ.', 'warning');
+              return;
             }
 
             if (lastImportedDate) {
@@ -1057,7 +1083,7 @@ export default function App() {
        payload,
        editingId,
        previousGoal,
-       detachLinks: amountEdited,
+       resetBalance: amountEdited,
      });
      cancelEdit();
      showToast(

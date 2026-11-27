@@ -28,7 +28,7 @@ it('preserves a legacy emergency fund classification when renaming the goal', as
   });
   expect(updateDoc).toHaveBeenCalledWith(
     { collection: 'goals', id: goal.id },
-    { name: 'Dự phòng', amount: 300, isEmergencyFund: true },
+    { name: 'Dự phòng', isEmergencyFund: true },
   );
 });
 
@@ -39,11 +39,13 @@ describe('lockMonthlyFundRepayment', () => {
     plan: [{ goalId: 'emergency', amount: 300, debtYear: 2026, debtMonth: 8 }],
     payDate: '2026-11-01',
     sourceWallet: 'Salary',
-    goals: [{ id: 'emergency', wallet: 'Reserve' }],
   };
 
   it('writes repayment, transfer legs and wallet and fund changes in the same transaction', async () => {
-    transaction.get.mockResolvedValue({ exists: () => false, data: () => undefined });
+    transaction.get.mockImplementation(async ({ collection }) => ({
+      exists: () => collection === 'goals',
+      data: () => collection === 'goals' ? { wallet: 'Reserve', balanceRevision: 'current' } : undefined,
+    }));
     await lockMonthlyFundRepayment(request);
 
     expect(transaction.update).toHaveBeenCalledWith({ collection: 'goals', id: 'emergency' }, { amount: { increment: 300 } });

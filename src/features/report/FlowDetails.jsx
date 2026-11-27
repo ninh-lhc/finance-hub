@@ -28,7 +28,8 @@ function rowDetail(item) {
 export default function FlowDetails({ picture, flow, onOpen, onMatchReimbursement }) {
   if (!picture || !flow) return null;
   const hasHelped = picture.helped > 0 || picture.reimbursement > 0;
-  const hasFund = picture.outstandingBorrow > 0 || picture.fundBorrow > 0 || picture.repaid > 0 || flow.transfers.length > 0 || flow.spends.length > 0;
+  const hasFund = picture.outstandingBorrow > 0 || picture.fundBorrow > 0 || picture.repaid > 0
+    || flow.remainder > 0 || flow.transfers.length > 0 || flow.spends.length > 0;
   if (!hasHelped && !hasFund) return null;
 
   const owed = picture.outstandingBorrow ?? Math.max(0, picture.fundBorrow - picture.repaid);
