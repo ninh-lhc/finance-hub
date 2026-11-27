@@ -18,6 +18,35 @@ export const DEFAULT_JAR_SETTINGS = {
   ],
 };
 
+function normalizeCategory(value) {
+  return value.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/g, 'd')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+const categoryRules = [
+  ['giving', /\b(tu thien|quyen gop|ung ho|cho di|qua tang|bieu tang)\b/],
+  ['freedom', /\b(dau tu|chung khoan|co phieu|trai phieu|tu do tai chinh)\b/],
+  ['savings', /\b(tiet kiem|du phong|khan cap|tich luy|mua lon)\b/],
+  ['education', /\b(hoc tap|hoc phi|khoa hoc|giao duc|sach|ky nang)\b/],
+  ['play', /\b(giai tri|du lich|huong thu|ca phe|mua sam|so thich|xem phim)\b/],
+];
+
+export function suggestJarSettings(categories) {
+  const childCategory = categories.find((category) => normalizeCategory(category) === 'chi cho con')
+    || categories.find((category) => /^(tien (cho )?con|chi phi (cho )?con|nuoi con|chu cap (cho )?con|cho con|con cai)$/.test(normalizeCategory(category)))
+    || DEFAULT_JAR_SETTINGS.childCategory;
+  return {
+    ...DEFAULT_JAR_SETTINGS,
+    childCategory,
+    categoryJars: [...new Set(categories)].flatMap((category) => {
+      const key = normalizeCategory(category);
+      if (category === childCategory || ['chi ho', 'chuyen khoan di', 'chuyen khoan den'].includes(key)) return [];
+      const jar = categoryRules.find(([, pattern]) => pattern.test(key))?.[0] || 'needs';
+      return [[category, jar]];
+    }),
+  };
+}
+
 function jarSpending(transactions, goals, context, assignments, childCategory) {
   const totals = new Map();
   for (const row of transactions) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSixJarPlan, DEFAULT_JAR_SETTINGS } from './sixJars.js';
+import { buildSixJarPlan, DEFAULT_JAR_SETTINGS, suggestJarSettings } from './sixJars.js';
 
 const expense = (category, amount) => ({ type: 'EXPENSE', category, amount });
 const salary = { type: 'INCOME', category: 'Lương', amount: 9_700_000 };
@@ -14,6 +14,24 @@ const input = {
 };
 
 describe('6 jars based on previous spending', () => {
+  it('assigns existing categories on activation and uses their past spending for the budget', () => {
+    const settings = suggestJarSettings([
+      'Tiền cho con', 'Ăn uống', 'Mua sắm', 'Học phí', 'Ủng hộ', 'Đầu tư', 'Quỹ dự phòng', 'Chi hộ', 'Chuyển khoản đi',
+    ]);
+    expect(settings.childCategory).toBe('Tiền cho con');
+    expect(Object.fromEntries(settings.categoryJars)).toEqual({
+      'Ăn uống': 'needs', 'Mua sắm': 'play', 'Học phí': 'education',
+      'Ủng hộ': 'giving', 'Đầu tư': 'freedom', 'Quỹ dự phòng': 'savings',
+    });
+    const plan = buildSixJarPlan({
+      ...input,
+      settings,
+      transactions: [salary, expense('Tiền cho con', 4_000_000)],
+      previousTransactions: [expense('Mua sắm', 500_000), expense('Chi hộ', 10_000_000)],
+    });
+    expect(plan).toMatchObject({ ready: true, available: 5_700_000, mappedPrevious: 500_000 });
+    expect(plan.jars.find(({ id }) => id === 'play').limit).toBe(3_135_000);
+  });
   it('waits until there is salary and the child expense is fully paid', () => {
     expect(buildSixJarPlan({ ...input, transactions: [salary, expense('Chi cho con', 2_000_000)] }).ready).toBe(false);
     expect(buildSixJarPlan({ ...input, transactions: [childPayment] }).ready).toBe(false);

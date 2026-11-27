@@ -1,17 +1,31 @@
 import { useState } from 'react';
 import { Settings2 } from 'lucide-react';
 import utils from '../../utils/format.js';
-import { DEFAULT_JAR_SETTINGS, SIX_JARS } from '../../logic/sixJars.js';
+import { SIX_JARS, suggestJarSettings } from '../../logic/sixJars.js';
 
 const field = 'min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm';
 
 export default function SixJarsPanel({ settings, categories, plan, onSave }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const config = settings || DEFAULT_JAR_SETTINGS;
-  const assignments = new Map(config.categoryJars);
+  const [suggestionVersion, setSuggestionVersion] = useState(0);
+  const suggested = suggestJarSettings(categories);
+  const config = settings || suggested;
+  const assignments = new Map(suggestionVersion ? suggested.categoryJars : config.categoryJars);
 
-  const save = async (event) => {
+  const persist = async (nextSettings) => {
+    setSaving(true);
+    try {
+      await onSave(nextSettings);
+      setEditing(false);
+    } catch (error) {
+      console.error('Không lưu được cấu hình 6 hũ', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const save = (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const childCategory = String(form.get('childCategory')).trim();
@@ -21,23 +35,19 @@ export default function SixJarsPanel({ settings, categories, plan, onSave }) {
       const jar = form.get(`category-${index}`);
       return jar && category !== childCategory ? [[category, jar]] : [];
     });
-    setSaving(true);
-    try {
-      await onSave({ childCategory, childTarget, categoryJars });
-      setEditing(false);
-    } catch (error) {
-      console.error('Không lưu được cấu hình 6 hũ', error);
-    } finally {
-      setSaving(false);
-    }
+    return persist({ childCategory, childTarget, categoryJars });
   };
 
   return (
     <section className="space-y-4 rounded-[24px] border border-slate-100 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="six-jars-title">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="six-jars-title" className="text-lg font-bold text-[#1B2559]">6 hũ theo chi thực tế</h2>
-        <button type="button" onClick={() => setEditing((open) => !open)} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-indigo-50 px-3 text-sm font-semibold text-indigo-700">
-          <Settings2 size={16} aria-hidden="true" /> {settings ? 'Thiết lập' : 'Bật 6 hũ'}
+        <button type="button" disabled={saving} onClick={() => {
+          if (!settings) return persist(config);
+          setSuggestionVersion(0);
+          setEditing((open) => !open);
+        }} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-indigo-50 px-3 text-sm font-semibold text-indigo-700 disabled:opacity-60">
+          <Settings2 size={16} aria-hidden="true" /> {saving ? 'Đang lưu…' : settings ? 'Thiết lập' : 'Bật 6 hũ'}
         </button>
       </div>
 
@@ -54,10 +64,13 @@ export default function SixJarsPanel({ settings, categories, plan, onSave }) {
               <input className={field} name="childTarget" type="number" min="1" step="1" required defaultValue={config.childTarget} />
             </label>
           </div>
+          <button type="button" disabled={saving} onClick={() => setSuggestionVersion((version) => version + 1)} className="min-h-10 rounded-xl bg-indigo-50 px-3 text-sm font-semibold text-indigo-700">
+            Tự gán danh mục
+          </button>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {categories.map((category, index) => (
               <label key={category} className="grid gap-1 text-sm">{category}
-                <select className={field} name={`category-${index}`} defaultValue={assignments.get(category) || ''}>
+                <select key={suggestionVersion} className={field} name={`category-${index}`} defaultValue={assignments.get(category) || ''}>
                   <option value="">Chưa gán hũ</option>
                   {SIX_JARS.map((jar) => <option key={jar.id} value={jar.id}>{jar.label}</option>)}
                 </select>
