@@ -394,10 +394,11 @@ export default function App() {
       goals,
       context: financeContext,
       repayments: fundRepayments,
+      budgets,
       year: selectedYear,
       month: selectedMonth,
     });
-  }, [sixJars, history, transactionsReady, transactions, goals, financeContext, fundRepayments, selectedYear, selectedMonth]);
+  }, [sixJars, history, transactionsReady, transactions, goals, financeContext, fundRepayments, selectedYear, selectedMonth, budgets]);
   const outstandingBorrow = useMemo(() => {
     if (!history) return undefined;
     const period = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
@@ -1181,12 +1182,21 @@ export default function App() {
               generateDashboardAdvice={generateDashboardAdvice}
               monthComparison={monthComparison}
               comparisonReady={comparisonReady}
+              combinedBudgetReady={sixJarPlan?.ready}
               sixJarsPanel={user ? (
                 <SixJarsPanel
                   key={syncCode || user.uid}
                   settings={sixJars}
                   categories={categories.EXPENSE}
                   plan={sixJarPlan}
+                  budgetProgress={logic.budgetProgress}
+                  transactions={logic.monthData}
+                  onOpenTransaction={handleEditTransaction}
+                  onOpenBudgets={() => {
+                    setActiveTab('settings');
+                    setActiveSettingTab('budget');
+                    cancelEdit();
+                  }}
                   onSave={async (settings) => {
                     try {
                       const settingsRef = getDocRef('settings', 'general');

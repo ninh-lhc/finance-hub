@@ -6,7 +6,7 @@ export const SIX_JARS = [
   { id: 'freedom', label: 'Tự do tài chính', weight: 10 },
   { id: 'education', label: 'Học tập', weight: 10 },
   { id: 'play', label: 'Hưởng thụ', weight: 10 },
-  { id: 'giving', label: 'Cho đi', weight: 5 },
+  { id: 'giving', label: 'Hiếu hỉ & quà tặng', weight: 5 },
 ];
 
 export const DEFAULT_JAR_SETTINGS = {
@@ -38,7 +38,7 @@ function normalizeCategory(value) {
 }
 
 const categoryRules = [
-  ['giving', /\b(tu thien|quyen gop|ung ho|cho di|qua tang|bieu tang)\b/],
+  ['giving', /\b(hieu hi|dam tiec|dam cuoi|dam gio|tiec cuoi|tu thien|quyen gop|ung ho|cho di|qua tang|bieu tang)\b/],
   ['freedom', /\b(dau tu|chung khoan|co phieu|trai phieu|tu do tai chinh)\b/],
   ['savings', /\b(tiet kiem|du phong|khan cap|tich luy|mua lon)\b/],
   ['education', /\b(hoc tap|hoc phi|khoa hoc|giao duc|sach|ky nang)\b/],
@@ -72,7 +72,7 @@ function jarSpending(transactions, goals, context, assignments, childCategory) {
   return totals;
 }
 
-export function buildSixJarPlan({ settings, transactions, previousTransactions, goals, context, repayments, year, month }) {
+export function buildSixJarPlan({ settings, transactions, previousTransactions, goals, context, repayments, year, month, budgets = [] }) {
   const assignments = new Map(settings.categoryJars.filter(([, jar]) => SIX_JARS.some(({ id }) => id === jar)));
   let salary = 0;
   let childPaid = 0;
@@ -84,7 +84,9 @@ export function buildSixJarPlan({ settings, transactions, previousTransactions, 
   const repaid = buildSalaryPicture({
     transactions, goals, repaid: repaymentTotal(repayments, { year, month }),
   }).repaid;
-  const ready = salary > 0 && childPaid >= settings.childTarget;
+  const childBudget = budgets.find(({ category, amount }) => category === settings.childCategory && Number(amount) > 0);
+  const childTarget = childBudget ? Number(childBudget.amount) : settings.childTarget;
+  const ready = salary > 0 && childPaid >= childTarget;
   const available = Math.max(0, Math.floor(salary - childPaid - repaid));
   const actual = jarSpending(transactions, goals, context, assignments, settings.childCategory);
   const previous = jarSpending(previousTransactions, goals, context, assignments, settings.childCategory);
@@ -100,7 +102,7 @@ export function buildSixJarPlan({ settings, transactions, previousTransactions, 
   for (const jar of roundingOrder.slice(0, remainder)) jar.limit += 1;
 
   return {
-    salary, childPaid, repaid, ready, available, mappedPrevious,
+    salary, childPaid, childTarget, repaid, ready, available, mappedPrevious,
     unassigned: actual.get('') || 0,
     previousUnassigned: previous.get('') || 0,
     jars: jars.map(({ id, label, lastSpent, spent, limit }) => ({

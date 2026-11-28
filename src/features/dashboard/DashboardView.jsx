@@ -376,6 +376,7 @@ export default function DashboardView(props) {
     handleEditTransaction,
     comparisonReady,
     sixJarsPanel,
+    combinedBudgetReady,
   } = props;
 
   const [activeDay, setActiveDay] = useState(null);
@@ -746,7 +747,7 @@ export default function DashboardView(props) {
           </div>
         </div>
 
-        <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-8 shadow-sm border border-gray-100 min-w-0 h-full flex flex-col">
+        {!combinedBudgetReady && <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-8 shadow-sm border border-gray-100 min-w-0 h-full flex flex-col">
         {selectedBudgetCategory ? (
           <div className="flex flex-col min-h-0 flex-1">
             <button type="button" onClick={() => setSelectedBudgetCategory(null)} className="min-h-11 text-[10px] font-black text-[#4318FF] uppercase tracking-widest flex items-center gap-1 mb-4 self-start">
@@ -808,7 +809,7 @@ export default function DashboardView(props) {
         </div>
         </>
         )}
-        </div>
+        </div>}
       </div>
     </div>
   );

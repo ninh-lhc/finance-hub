@@ -14,6 +14,10 @@ const input = {
 };
 
 describe('6 jars based on previous spending', () => {
+  it('suggests the renamed jar for ceremonies and gifts using the saved jar ID', () => {
+    const settings = suggestJarSettings(['Đám Tiệc', 'Quà tặng', 'Con Cái', 'Chi hộ']);
+    expect(settings.categoryJars).toEqual([['Đám Tiệc', 'giving'], ['Quà tặng', 'giving']]);
+  });
   it('stores assignments as Firestore objects and restores the original plan settings', () => {
     const settings = suggestJarSettings(['Con cái', 'Mua sắm']);
     const stored = encodeJarSettings(settings);
@@ -46,6 +50,17 @@ describe('6 jars based on previous spending', () => {
     const plan = buildSixJarPlan({ ...input, transactions: [salary, expense('Chi cho con', 2_000_000), expense('Chi cho con', 2_000_000)] });
     expect(plan).toMatchObject({ ready: true, available: 5_700_000 });
     expect(plan.jars.map(({ limit }) => limit)).toEqual([3_135_000, 570_000, 570_000, 570_000, 570_000, 285_000]);
+  });
+
+  it('uses the child category budget as the activation target without changing cash available', () => {
+    const options = { ...input, transactions: [salary, childPayment] };
+    const budgets = [{ category: 'Chi cho con', amount: 4_500_000 }, { category: 'Ăn uống', amount: 1_000_000 }];
+    expect(buildSixJarPlan({ ...options, budgets })).toMatchObject({
+      ready: false, childTarget: 4_500_000, available: 5_700_000,
+    });
+    expect(buildSixJarPlan({ ...options, budgets: budgets.slice(1) })).toMatchObject({
+      ready: true, childTarget: 4_000_000, available: 5_700_000,
+    });
   });
 
   it('adjusts by mapped spending, reserves money for unspent jars, and deducts repayments once', () => {
