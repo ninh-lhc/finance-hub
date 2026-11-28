@@ -853,6 +853,7 @@ export default function App() {
       transactions: sourceData,
       goals: goals.filter((goal) => referencedGoals.has(goal.id)),
       repayments,
+      reimbursementLinks,
     });
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -930,6 +931,7 @@ export default function App() {
             const metadata = [
               ...parsed.ledgerGoals.map(({ id, ...data }) => ({ ref: getDocRef('goals', id), data })),
               ...parsed.ledgerRepayments.map(({ id, ...data }) => ({ ref: getDocRef('fundRepayments', id), data })),
+              ...parsed.reimbursementLinks.map((data) => ({ ref: getDocRef('reimbursementLinks', data.receiptKey), data })),
             ];
             for (let i = 0; i < metadata.length; i += chunkSize) {
               const chunk = metadata.slice(i, i + chunkSize);
@@ -1257,9 +1259,9 @@ export default function App() {
               onMatchReimbursement={async (receipt, expense) => {
                 const receiptKey = transactionKey(receipt);
                 try {
-                  await setDoc(getDocRef('reimbursementLinks', receiptKey), {
-                    receiptKey, expenseKey: transactionKey(expense),
-                  });
+                  const ref = getDocRef('reimbursementLinks', receiptKey);
+                  if (expense) await setDoc(ref, { receiptKey, expenseKey: transactionKey(expense) });
+                  else await deleteDoc(ref);
                   showToast('Đã đối chiếu khoản hoàn ứng.', 'success');
                 } catch (error) {
                   console.error(error);

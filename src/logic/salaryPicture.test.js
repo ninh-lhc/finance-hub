@@ -206,19 +206,53 @@ describe('buildSalaryPicture', () => {
     expect(context.reconcile(transactions.filter((item) => item.wallet === 'B')).commission).toBe(20);
   });
 
-  it('keeps ambiguous reimbursements unmatched until a separate link resolves them', () => {
+  it('settles equal advances oldest first unless a receipt is explicitly linked', () => {
     const first = tx({ id: 'first', type: 'EXPENSE', category: 'Chi hộ', date: '2026-10-01', amount: 100 });
     const second = tx({ id: 'second', type: 'EXPENSE', category: 'Chi hộ', date: '2026-10-02', amount: 100 });
     const receipt = tx({ id: 'receipt', type: 'INCOME', category: 'Thu nợ/Hoàn ứng', date: '2026-11-01', amount: 100 });
     const context = buildFinanceContext([first, second, receipt], goals);
     expect(buildSalaryPicture({ transactions: [receipt], context })).toMatchObject({
-      commission: 0, matched: 0, unmatchedReimbursement: 100,
+      commission: 0, matched: 100, unmatchedReimbursement: 0,
     });
+    expect(context.receipt(receipt).allocations).toEqual([{ expense: first, amount: 100 }]);
     const linked = buildFinanceContext([first, second, receipt], goals, [{ receiptKey: 'receipt', expenseKey: 'second' }]);
     expect(buildSalaryPicture({ transactions: [receipt], context: linked })).toMatchObject({
       commission: 0, matched: 100, unmatchedReimbursement: 0,
     });
     expect(buildSalaryPicture({ transactions: [second], context: linked }).unreimbursed).toBe(100);
+  });
+
+  it('uses one receipt for multiple advances even when a newer one matches its note and amount', () => {
+    const first = tx({ id: 'old', date: '2026-11-30', type: 'EXPENSE', category: 'Chi hộ', amount: 60 });
+    const second = tx({ id: 'new', date: '2026-12-01', type: 'EXPENSE', category: 'Chi hộ', amount: 100, note: 'Đi chợ' });
+    const payment = tx({ id: 'receipt', date: '2026-12-02', type: 'INCOME', category: 'Thu nợ/Hoàn ứng', amount: 100, note: 'Đi chợ' });
+    const last = { ...payment, id: 'last', date: '2026-12-03', amount: 80 };
+    const context = buildFinanceContext([last, second, payment, first], goals);
+    expect(context.receipt(payment)).toMatchObject({ commission: 0, allocations: [
+      { expense: first, amount: 60 }, { expense: second, amount: 40 },
+    ] });
+    expect(context.receipt(last)).toMatchObject({ matched: 60, commission: 20 });
+  });
+
+  it('allows correcting automatic allocations after later same-day payments', () => {
+    const expense = (id) => tx({ id, date: '2026-11-30', type: 'EXPENSE', category: 'Chi hộ', amount: 100 });
+    const first = expense('x');
+    const second = expense('y');
+    const receipt = (id, amount) => tx({ id, date: '2026-12-01', type: 'INCOME', category: 'Thu nợ/Hoàn ứng', amount });
+    const early = receipt('a', 100);
+    const late = receipt('b', 200);
+    const rows = [late, first, early, second];
+    const auto = buildFinanceContext(rows, goals);
+    expect(auto.candidates(early)).toEqual([first, second]);
+    expect(auto.candidates(late)).toEqual([second]);
+    const linked = buildFinanceContext(rows, goals, [{ receiptKey: 'a', expenseKey: 'y' }]);
+    expect(linked.candidates(late)).toEqual([first]);
+    const flow = listFlowItems([early, late], goals, linked);
+    expect(flow.reimbursements.find(({ id }) => id === 'a')).toMatchObject({
+      linkedExpenseKey: 'y', allocations: [{ expense: second, amount: 100 }],
+    });
+    expect(linked.reconcile(rows)).toMatchObject({ matched: 200, commission: 100, unreimbursed: 0 });
+    expect(linked.reconcile([first, second], '2026-11-30').unreimbursed).toBe(200);
   });
 
   it('applies the remainder of a targeted repayment to later open borrowing from the same fund', () => {

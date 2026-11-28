@@ -15,6 +15,15 @@ import {
 } from './financeCsv.js';
 
 describe('parseCsvLine', () => {
+  it('round-trips only the manual links for receipts in the exported period', () => {
+    const transactions = [{ id: 'receipt', date: '2026-12-01', type: 'INCOME', category: 'Thu nợ/Hoàn ứng',
+      amount: 120, wallet: 'Cash' }];
+    const link = { receiptKey: 'receipt', expenseKey: 'november-expense' };
+    const csv = serializeFinanceCsv({ transactions, reimbursementLinks: [link, { receiptKey: 'other', expenseKey: 'other-expense' }] });
+    expect(parseFinanceCsv(csv).reimbursementLinks).toEqual([link]);
+    expect(parseFinanceCsv(serializeFinanceCsv({ transactions })).reimbursementLinks).toEqual([]);
+  });
+
   it('parses simple comma-separated line', () => {
     expect(parseCsvLine('a,b,c')).toEqual(['a', 'b', 'c']);
   });

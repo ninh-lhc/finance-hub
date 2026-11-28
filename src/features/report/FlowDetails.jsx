@@ -69,17 +69,25 @@ export default function FlowDetails({ picture, flow, onOpen, onMatchReimbursemen
                   tone="text-[#157A45]"
                   onOpen={onOpen}
                 />
-                {onMatchReimbursement && item.id && item.candidates?.some((expense) => expense.id) && (
+                {item.allocations?.map(({ expense, amount }) => (
+                  <p key={expense.id || `${expense.date}-${expense.note}-${expense.amount}`} className="pb-1 text-xs text-slate-500">
+                    Hoàn {utils.formatVND(amount)} · {utils.formatDisplayDate(expense.date)} · {expense.note || expense.wallet}
+                  </p>
+                ))}
+                {onMatchReimbursement && item.id && (item.linkedExpenseKey || item.candidates?.some((expense) => expense.id)) && (
                   <select
                     aria-label="Chọn giao dịch chi hộ để đối chiếu"
-                    value=""
+                    value={item.linkedExpenseKey || ''}
                     className="mb-2 w-full rounded-lg border border-slate-200 p-2 text-sm"
                     onChange={({ target }) => {
                       const expense = item.candidates.find(({ id }) => id === target.value);
-                      if (expense) onMatchReimbursement(item.transaction, expense);
+                      if (expense || !target.value) onMatchReimbursement(item.transaction, expense || null);
                     }}
                   >
-                    <option value="">Chọn khoản chi hộ đã được hoàn</option>
+                    <option value="">Tự động · bù lần lượt từ khoản chi cũ nhất</option>
+                    {item.linkedExpenseKey && !item.candidates.some(({ id }) => id === item.linkedExpenseKey) && (
+                      <option value={item.linkedExpenseKey}>Liên kết đã lưu · khoản chi không còn trong danh sách chờ</option>
+                    )}
                     {item.candidates.filter((expense) => expense.id).map((expense) => (
                       <option key={expense.id} value={expense.id}>
                         {utils.formatDisplayDate(expense.date)} · {utils.formatVND(expense.amount)} · {expense.note || expense.wallet}

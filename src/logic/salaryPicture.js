@@ -270,6 +270,7 @@ export function buildFinanceContext(transactions, goals, reimbursementLinks = []
   }
   const open = [];
   const receipts = new Map();
+  const choices = new Map();
   const links = new Map(reimbursementLinks.map(({ receiptKey, expenseKey }) => [receiptKey, expenseKey]));
   const ordered = [...transactions].sort((left, right) => String(left.date).localeCompare(String(right.date))
     || Number(left.type === 'INCOME') - Number(right.type === 'INCOME')
@@ -282,19 +283,18 @@ export function buildFinanceContext(transactions, goals, reimbursementLinks = []
       open.push({ transaction, remaining: amount, payments: [] });
     }
     if (transaction.type !== 'INCOME' || transaction.category !== PASS_THROUGH_INCOME) continue;
-    const note = fold(transaction.note).trim();
     const receiptKey = transactionKey(transaction);
     const linkedExpense = links.get(receiptKey);
     const candidates = open.filter((item) => item.remaining > 0);
-    const byNote = note ? candidates.filter((item) => fold(item.transaction.note).trim() === note) : [];
-    const matches = linkedExpense
+    // Capture the open advances before this receipt or later same-day receipts pay them.
+    choices.set(receiptKey, candidates.map((item) => item.transaction));
+    const toSettle = linkedExpense
       ? open.filter((item) => transactionKey(item.transaction) === linkedExpense)
-      : byNote.length ? byNote : candidates.filter((item) => item.remaining === amount);
-    if (!open.length || (linkedExpense && !matches.length) || matches.length > 1) continue;
-    // Without an individual match, settle outstanding advances oldest first.
+      : candidates;
+    if (!open.length || (linkedExpense && !toSettle.length)) continue;
     let remainder = amount;
     const allocations = [];
-    for (const item of matches.length ? matches : candidates) {
+    for (const item of toSettle) {
       const paid = Math.min(remainder, item.remaining);
       if (paid > 0) {
         item.remaining -= paid;
@@ -317,10 +317,8 @@ export function buildFinanceContext(transactions, goals, reimbursementLinks = []
       ), 0);
     },
     receipt: (transaction) => receipts.get(transactionKey(transaction)),
-    candidates: (receipt) => open.filter(({ transaction, payments }) => transaction.date <= receipt.date
-      && Number(transaction.amount) > payments.filter((payment) => payment.date <= receipt.date)
-        .reduce((sum, payment) => sum + payment.amount, 0))
-      .map(({ transaction }) => transaction),
+    candidates: (receipt) => choices.get(transactionKey(receipt)) || [],
+    linkedExpenseKey: (receipt) => links.get(transactionKey(receipt)),
     reconcile(scope, through = scope.reduce((latest, transaction) => transaction.date > latest ? transaction.date : latest, '')) {
       let matched = 0;
       let commission = 0;
@@ -472,7 +470,9 @@ export function listFlowItems(transactions = [], goals = [], context, { through,
       reimbursements.push(flowEntry(transaction, amount, {
         unmatched,
         commission: receipt?.commission || 0,
-        candidates: unmatched ? context.candidates(transaction) : [],
+        allocations: receipt?.allocations || [],
+        candidates: context?.candidates(transaction) || [],
+        linkedExpenseKey: context?.linkedExpenseKey(transaction),
       }));
     }
     if (isCountedExpense(transaction) && transaction.category === PASS_THROUGH_EXPENSE) {

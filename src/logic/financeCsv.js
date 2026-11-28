@@ -239,7 +239,8 @@ function readLedgerMetadata(value) {
     sourceWallet: typeof sourceWallet === 'string' ? sourceWallet : '',
     destinationWallet: typeof destinationWallet === 'string' ? destinationWallet : '',
   }));
-  return { id: validDocumentId(metadata.id) ? metadata.id : undefined, data, goals, repayments };
+  const expenseKey = validDocumentId(metadata.expenseKey) ? metadata.expenseKey : undefined;
+  return { id: validDocumentId(metadata.id) ? metadata.id : undefined, data, goals, repayments, expenseKey };
 }
 
 export function parseFinanceCsv(csvText, options = {}) {
@@ -268,6 +269,7 @@ export function parseFinanceCsv(csvText, options = {}) {
   const metadataIndex = header.indexOf(LEDGER_METADATA);
   const goalRecords = new Map();
   const repaymentRecords = new Map();
+  const reimbursementLinks = new Map();
   const rows = [];
   const newWalletsSet = new Set(initialWallets);
   const newIncCats = new Set(initialCategories.INCOME ?? []);
@@ -360,6 +362,9 @@ export function parseFinanceCsv(csvText, options = {}) {
     if (metadata.data?.linkedWallet) newWalletsSet.add(metadata.data.linkedWallet);
     for (const goal of metadata.goals || []) goalRecords.set(goal.id, goal);
     for (const item of metadata.repayments || []) repaymentRecords.set(item.id, item);
+    if (type === 'INCOME' && category === 'Thu nợ/Hoàn ứng' && metadata.id && metadata.expenseKey) {
+      reimbursementLinks.set(metadata.id, { receiptKey: metadata.id, expenseKey: metadata.expenseKey });
+    }
     validCount += 1;
     lastImportedDate = date;
   }
@@ -385,6 +390,7 @@ export function parseFinanceCsv(csvText, options = {}) {
     warnings,
     ledgerGoals: [...goalRecords.values()],
     ledgerRepayments: [...repaymentRecords.values()],
+    reimbursementLinks: [...reimbursementLinks.values()],
   };
 }
 
@@ -456,11 +462,13 @@ export function serializeFinanceCsv(input) {
     transactions,
     goals = [],
     repayments = [],
+    reimbursementLinks = [],
     includeBom = true,
     formatDisplayDate = utils.formatDisplayDate,
   } = input ?? {};
 
   const list = Array.isArray(transactions) ? [...transactions] : [];
+  const expenseByReceipt = new Map(reimbursementLinks.map(({ receiptKey, expenseKey }) => [receiptKey, expenseKey]));
   list.sort((a, b) => new Date(b.date) - new Date(a.date));
   const hasMetadata = list.some((row) => row.id || row.transferId || row.goalId || row.fundRepaymentId)
     || goals.length > 0 || repayments.length > 0;
@@ -483,6 +491,7 @@ export function serializeFinanceCsv(input) {
         goalBalanceRevision: t.goalBalanceRevision, fundRepaymentId: t.fundRepaymentId,
         goals: index === 0 ? goals : undefined,
         repayments: index === 0 ? repayments : undefined,
+        expenseKey: t.type === 'INCOME' && t.category === 'Thu nợ/Hoàn ứng' ? expenseByReceipt.get(t.id) : undefined,
       }))] : []),
     ];
   });
