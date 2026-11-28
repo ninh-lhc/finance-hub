@@ -26,6 +26,18 @@ html.dark .bg-white\/80 {
   background-color: var(--card);
 }
 
+.six-jar-card {
+  background-color: var(--card-muted);
+  border-inline-start: 4px solid var(--jar-accent);
+}
+
+.six-jar-card[data-jar="needs"] { --jar-accent: #38bdf8; }
+.six-jar-card[data-jar="savings"] { --jar-accent: #34d399; }
+.six-jar-card[data-jar="freedom"] { --jar-accent: #a78bfa; }
+.six-jar-card[data-jar="education"] { --jar-accent: #fbbf24; }
+.six-jar-card[data-jar="play"] { --jar-accent: #f472b6; }
+.six-jar-card[data-jar="giving"] { --jar-accent: #fb923c; }
+
 html.dark .bg-\[\#F8F9FA\],
 html.dark .bg-gray-50 {
   background-color: var(--card-muted);

@@ -46,7 +46,7 @@ export default function SixJarsPanel({ settings, categories, plan, onSave }) {
           if (!settings) return persist(config);
           setSuggestionVersion(0);
           setEditing((open) => !open);
-        }} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-indigo-50 px-3 text-sm font-semibold text-indigo-700 disabled:opacity-60">
+        }} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-indigo-50 px-3 text-sm font-semibold text-[#4318FF] disabled:opacity-60">
           <Settings2 size={16} aria-hidden="true" /> {saving ? 'Đang lưu…' : settings ? 'Thiết lập' : 'Bật 6 hũ'}
         </button>
       </div>
@@ -64,7 +64,7 @@ export default function SixJarsPanel({ settings, categories, plan, onSave }) {
               <input className={field} name="childTarget" type="number" min="1" step="1" required defaultValue={config.childTarget} />
             </label>
           </div>
-          <button type="button" disabled={saving} onClick={() => setSuggestionVersion((version) => version + 1)} className="min-h-10 rounded-xl bg-indigo-50 px-3 text-sm font-semibold text-indigo-700">
+          <button type="button" disabled={saving} onClick={() => setSuggestionVersion((version) => version + 1)} className="min-h-10 rounded-xl bg-indigo-50 px-3 text-sm font-semibold text-[#4318FF]">
             Tự gán danh mục
           </button>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -92,7 +92,13 @@ export default function SixJarsPanel({ settings, categories, plan, onSave }) {
             {plan.repaid > 0 && <span>Đã hoàn quỹ {utils.formatVND(plan.repaid)}</span>}
           </div>
           {!plan.ready ? (
-            <p className="text-sm text-slate-600">Hạn mức sẽ xuất hiện khi đã ghi nhận lương và đủ khoản chi cho con trong tháng.</p>
+            <p role="status" className="text-sm text-slate-600">
+              {plan.salary > 0 ? 'Đã ghi nhận lương.' : 'Đang chờ ghi nhận lương tháng này.'}
+              {' '}{plan.childPaid < settings.childTarget
+                ? `Còn ${utils.formatVND(settings.childTarget - plan.childPaid)} cần chi cho con.`
+                : 'Đã chi đủ khoản cho con.'}
+              {' '}Hạn mức tự hiện khi đủ cả hai điều kiện.
+            </p>
           ) : (
             <>
               <p className="text-sm text-slate-700">
@@ -101,9 +107,9 @@ export default function SixJarsPanel({ settings, categories, plan, onSave }) {
               </p>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {plan.jars.map((jar) => (
-                  <article key={jar.id} className="rounded-2xl bg-slate-50 p-4">
+                  <article key={jar.id} data-jar={jar.id} className="six-jar-card rounded-2xl p-4">
                     <h3 className="text-sm font-bold text-[#1B2559]">{jar.label}</h3>
-                    <p className={`mt-1 text-lg font-bold tabular-nums ${jar.remaining < 0 ? 'text-red-700' : 'text-[#1B2559]'}`}>
+                    <p className={`mt-1 text-lg font-bold tabular-nums ${jar.remaining < 0 ? 'text-red-700 expense-ink' : 'text-[#1B2559]'}`}>
                       {jar.remaining < 0 ? 'Vượt ' : 'Còn '}{utils.formatVND(Math.abs(jar.remaining))}
                     </p>
                     <p className="text-xs text-slate-600">Đã chi {utils.formatVND(jar.spent)} / {utils.formatVND(jar.limit)}</p>
