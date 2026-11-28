@@ -272,7 +272,9 @@ export function buildFinanceContext(transactions, goals, reimbursementLinks = []
   const receipts = new Map();
   const links = new Map(reimbursementLinks.map(({ receiptKey, expenseKey }) => [receiptKey, expenseKey]));
   const ordered = [...transactions].sort((left, right) => String(left.date).localeCompare(String(right.date))
-    || Number(left.type === 'INCOME') - Number(right.type === 'INCOME'));
+    || Number(left.type === 'INCOME') - Number(right.type === 'INCOME')
+    || String(left.createdAt || '').localeCompare(String(right.createdAt || ''))
+    || transactionKey(left).localeCompare(transactionKey(right)));
   for (const transaction of ordered) {
     const amount = Number(transaction.amount || 0);
     if (amount <= 0) continue;
@@ -286,14 +288,23 @@ export function buildFinanceContext(transactions, goals, reimbursementLinks = []
     const candidates = open.filter((item) => item.remaining > 0);
     const byNote = note ? candidates.filter((item) => fold(item.transaction.note).trim() === note) : [];
     const matches = linkedExpense
-      ? open.filter((item) => item.remaining > 0 && transactionKey(item.transaction) === linkedExpense)
+      ? open.filter((item) => transactionKey(item.transaction) === linkedExpense)
       : byNote.length ? byNote : candidates.filter((item) => item.remaining === amount);
-    if (matches.length !== 1) continue;
-    const [match] = matches;
-    const matched = Math.min(amount, match.remaining);
-    match.remaining -= matched;
-    match.payments.push({ date: transaction.date, amount: matched });
-    receipts.set(receiptKey, { matched, commission: amount - matched, expense: match.transaction });
+    if (!open.length || (linkedExpense && !matches.length) || matches.length > 1) continue;
+    // Without an individual match, settle outstanding advances oldest first.
+    let remainder = amount;
+    const allocations = [];
+    for (const item of matches.length ? matches : candidates) {
+      const paid = Math.min(remainder, item.remaining);
+      if (paid > 0) {
+        item.remaining -= paid;
+        item.payments.push({ date: transaction.date, amount: paid });
+        allocations.push({ expense: item.transaction, amount: paid });
+        remainder -= paid;
+      }
+      if (!remainder) break;
+    }
+    receipts.set(receiptKey, { matched: amount - remainder, commission: remainder, allocations });
   }
   const expenses = new Map(open.map((item) => [transactionKey(item.transaction), item]));
 
@@ -456,9 +467,11 @@ export function listFlowItems(transactions = [], goals = [], context, { through,
     const amount = Number(transaction?.amount || 0);
     if (!amount) return;
     if (isCountedIncome(transaction) && transaction.category === PASS_THROUGH_INCOME) {
-      const unmatched = Boolean(context && !context.receipt(transaction));
+      const receipt = context?.receipt(transaction);
+      const unmatched = Boolean(context && !receipt);
       reimbursements.push(flowEntry(transaction, amount, {
         unmatched,
+        commission: receipt?.commission || 0,
         candidates: unmatched ? context.candidates(transaction) : [],
       }));
     }

@@ -191,6 +191,21 @@ describe('buildSalaryPicture', () => {
     expect(buildSalaryPicture({ transactions: history[1].transactions, goals, repaid: 300 }).repaid).toBe(500);
   });
 
+  it('settles several advances and attributes only the excess to each receiving wallet', () => {
+    const advances = [70, 45].map((amount, i) => tx({ id: String(i), type: 'EXPENSE',
+      category: 'Chi hộ', amount, date: '2026-11-01', wallet: 'A' }));
+    const receipt = (id, date, amount, wallet) => tx({ id, date, amount, wallet,
+      type: 'INCOME', category: 'Thu nợ/Hoàn ứng' });
+    const receipts = [receipt('a', '2026-11-02', 50, 'B'), receipt('b', '2026-11-03', 80, 'A'),
+      receipt('c', '2026-11-04', 20, 'B')];
+    const transactions = [...receipts, ...advances];
+    const context = buildFinanceContext(transactions, []);
+    expect(context.reconcile(transactions)).toMatchObject({ matched: 115, commission: 35, unreimbursed: 0 });
+    expect(context.reconcile(advances, '2026-11-02').unreimbursed).toBe(65);
+    expect(receipts.map((item) => context.receipt(item).commission)).toEqual([0, 15, 20]);
+    expect(context.reconcile(transactions.filter((item) => item.wallet === 'B')).commission).toBe(20);
+  });
+
   it('keeps ambiguous reimbursements unmatched until a separate link resolves them', () => {
     const first = tx({ id: 'first', type: 'EXPENSE', category: 'Chi hộ', date: '2026-10-01', amount: 100 });
     const second = tx({ id: 'second', type: 'EXPENSE', category: 'Chi hộ', date: '2026-10-02', amount: 100 });

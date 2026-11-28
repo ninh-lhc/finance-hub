@@ -162,21 +162,21 @@ async function offerFundAdjustment({ payload, goals, fundRepayments, reimburseme
   const history = await readTransactionHistory(getCollectionRef, date.slice(0, 7));
   const known = history.flatMap((entry) => entry.transactions).filter((transaction) => transaction.date <= date);
   const receipt = buildFinanceContext(known, goals, reimbursementLinks).receipt(payload);
-  if (!receipt || Number(receipt.expense.goalDelta) >= 0) return;
-  const goal = goals.find((item) => item.id === receipt.expense.goalId && isEmergencyGoal(item));
-  if (!goal) return;
-  const unpaid = unpaidHelpedLocks({ transactions: known, goals, repayments: fundRepayments })
-    .find((item) => item.goalId === goal.id)?.amount || 0;
-  const amount = Math.min(unpaid, receipt.matched);
-  if (amount <= 0) return;
-  const destinationWallet = goal.wallet || payload.wallet;
-  const movement = destinationWallet === payload.wallet ? '' : ` Chuyển từ ${payload.wallet} sang ${destinationWallet}.`;
-  const accepted = window.confirm(`Hoàn ${utils.formatVND(amount)} đã chi hộ từ quỹ khẩn cấp?${movement}`);
-  if (!accepted) return;
-  await lockFundRepayment({
-    getCollectionRef, getDocRef, goalId: goal.id, amount, debtYear: year, debtMonth: month,
-    payDate: date, kind: 'helped', receiptId: payload.id, sourceWallet: payload.wallet, destinationWallet,
-  });
+  if (!receipt?.matched) return;
+  const unpaid = unpaidHelpedLocks({ transactions: known, goals, repayments: fundRepayments });
+  for (const goal of goals.filter(isEmergencyGoal)) {
+    const principal = receipt.allocations.reduce((sum, { expense, amount }) =>
+      sum + (expense.goalId === goal.id && expense.goalDelta < 0 ? amount : 0), 0);
+    const amount = Math.min(principal, unpaid.find((item) => item.goalId === goal.id)?.amount || 0);
+    if (amount <= 0) continue;
+    const destinationWallet = goal.wallet || payload.wallet;
+    const movement = destinationWallet === payload.wallet ? '' : ` Chuyển từ ${payload.wallet} sang ${destinationWallet}.`;
+    if (!window.confirm(`Hoàn ${utils.formatVND(amount)} đã chi hộ từ ${goal.name}?${movement}`)) continue;
+    await lockFundRepayment({
+      getCollectionRef, getDocRef, goalId: goal.id, amount, debtYear: year, debtMonth: month,
+      payDate: date, kind: 'helped', receiptId: `${payload.id}_${goal.id}`, sourceWallet: payload.wallet, destinationWallet,
+    });
+  }
 }
 
 export default function App() {

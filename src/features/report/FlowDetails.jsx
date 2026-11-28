@@ -64,7 +64,7 @@ export default function FlowDetails({ picture, flow, onOpen, onMatchReimbursemen
                 <FlowRow
                   item={item}
                   title={item.unmatched ? 'Hoàn ứng · Chưa đối chiếu' : 'Thu nợ/Hoàn ứng'}
-                  detail={rowDetail(item)}
+                  detail={item.commission ? `${rowDetail(item)} · Hoa hồng ${utils.formatVND(item.commission)}` : rowDetail(item)}
                   amount={`+${utils.formatVND(item.amount)}`}
                   tone="text-[#157A45]"
                   onOpen={onOpen}
