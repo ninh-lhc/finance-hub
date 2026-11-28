@@ -18,6 +18,20 @@ export const DEFAULT_JAR_SETTINGS = {
   ],
 };
 
+// Firestore supports arrays of objects but rejects arrays of tuples.
+export function encodeJarSettings(settings) {
+  return { ...settings, categoryJars: settings.categoryJars.map(([category, jar]) => ({ category, jar })) };
+}
+
+export function decodeJarSettings(settings) {
+  if (!settings) return null;
+  return {
+    ...settings,
+    categoryJars: (settings.categoryJars || []).map((entry) =>
+      Array.isArray(entry) ? entry : [entry.category, entry.jar]),
+  };
+}
+
 function normalizeCategory(value) {
   return value.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/g, 'd')
     .replace(/[^a-z0-9]+/g, ' ').trim();

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { onSnapshot } from 'firebase/firestore';
+import { decodeJarSettings } from '../logic/sixJars.js';
 
 export default function useFinanceSettings({ user, getDocRef, syncCode }) {
   const [categories, setCategories] = useState({
@@ -15,7 +16,7 @@ export default function useFinanceSettings({ user, getDocRef, syncCode }) {
     const unsubSettings = onSnapshot(
       getDocRef('settings', 'general'),
       (docSnap) => {
-        setJarConfig({ source: getDocRef, settings: docSnap.data()?.sixJars || null });
+        setJarConfig({ source: getDocRef, settings: decodeJarSettings(docSnap.data()?.sixJars) });
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (data.categories) setCategories(data.categories);

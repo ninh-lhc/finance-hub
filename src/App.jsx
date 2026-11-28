@@ -23,7 +23,7 @@ import utils from './utils/format.js';
 import { deriveFinanceLogic, deriveTransactionView } from './logic/deriveFinance.js';
 import { buildDataSourceDiagnostics } from './logic/dataSourceDiagnostics.js';
 import { calculateWalletBalances } from './logic/balanceMaintenance.js';
-import { buildSixJarPlan } from './logic/sixJars.js';
+import { buildSixJarPlan, encodeJarSettings } from './logic/sixJars.js';
 import { buildMonthComparison, filterByYearMonth, previousPeriod } from './logic/monthComparison.js';
 import { buildMonthReport } from './logic/monthReport.js';
 import { deleteConfirmMessage } from './logic/deleteConfirm.js';
@@ -807,7 +807,7 @@ export default function App() {
         const copies = snapshots.flatMap(({ name, snapshot }) => snapshot.docs.map((item) => ({
           name, id: item.id, data: item.data(),
         })));
-        copies.push({ name: 'settings', id: 'general', data: { categories, wallets, walletBalances, ...(sixJars ? { sixJars } : {}) } });
+        copies.push({ name: 'settings', id: 'general', data: { categories, wallets, walletBalances, ...(sixJars ? { sixJars: encodeJarSettings(sixJars) } : {}) } });
 
         const chunkSize = 400;
         for (let i = 0; i < copies.length; i += chunkSize) {
@@ -1194,7 +1194,7 @@ export default function App() {
                         const stored = (await transaction.get(settingsRef)).data()?.categories || categories;
                         const expenseCategories = stored.EXPENSE || [];
                         transaction.set(settingsRef, {
-                          sixJars: settings,
+                          sixJars: encodeJarSettings(settings),
                           categories: {
                             ...stored,
                             EXPENSE: [...new Set([...expenseCategories, settings.childCategory])],

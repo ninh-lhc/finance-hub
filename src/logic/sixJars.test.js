@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSixJarPlan, DEFAULT_JAR_SETTINGS, suggestJarSettings } from './sixJars.js';
+import { buildSixJarPlan, decodeJarSettings, DEFAULT_JAR_SETTINGS, encodeJarSettings, suggestJarSettings } from './sixJars.js';
 
 const expense = (category, amount) => ({ type: 'EXPENSE', category, amount });
 const salary = { type: 'INCOME', category: 'Lương', amount: 9_700_000 };
@@ -14,6 +14,14 @@ const input = {
 };
 
 describe('6 jars based on previous spending', () => {
+  it('stores assignments as Firestore objects and restores the original plan settings', () => {
+    const settings = suggestJarSettings(['Con cái', 'Mua sắm']);
+    const stored = encodeJarSettings(settings);
+    expect(stored.categoryJars).toEqual([{ category: 'Mua sắm', jar: 'play' }]);
+    expect(decodeJarSettings(stored)).toEqual(settings);
+    expect(decodeJarSettings(settings)).toEqual(settings);
+    expect(decodeJarSettings(undefined)).toBeNull();
+  });
   it('assigns existing categories on activation and uses their past spending for the budget', () => {
     const settings = suggestJarSettings([
       'Tiền cho con', 'Ăn uống', 'Mua sắm', 'Học phí', 'Ủng hộ', 'Đầu tư', 'Quỹ dự phòng', 'Chi hộ', 'Chuyển khoản đi',

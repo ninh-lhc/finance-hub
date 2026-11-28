@@ -1,5 +1,6 @@
 import { getDocs, setDoc, writeBatch, increment, deleteField } from 'firebase/firestore';
 import { db } from '../firebase/config.js';
+import { encodeJarSettings } from '../../logic/sixJars.js';
 import {
   normalizeWalletName,
   normalizeCategoryName,
@@ -162,7 +163,7 @@ export async function saveCategoryToFirestore({
       } : null;
       batch.set(
         getDocRef('settings', 'general'),
-        { categories: newCategories, ...(renamedJars ? { sixJars: renamedJars } : {}) },
+        { categories: newCategories, ...(renamedJars ? { sixJars: encodeJarSettings(renamedJars) } : {}) },
         { merge: true },
       );
       await batch.commit();
